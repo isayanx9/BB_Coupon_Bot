@@ -241,7 +241,7 @@ async def pay_order(callback: CallbackQuery):
     )
 
     await callback.answer()
-    
+
 # =========================
 # CANCEL ORDER
 # =========================
@@ -357,4 +357,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    pass
