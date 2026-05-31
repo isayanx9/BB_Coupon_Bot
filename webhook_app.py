@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 app = FastAPI()
@@ -14,7 +14,12 @@ async def home():
 
 
 @app.post("/webhook/cashfree")
-async def cashfree_webhook():
+async def cashfree_webhook(request: Request):
+
+    data = await request.json()
+
+    print("CASHFREE WEBHOOK:")
+    print(data)
 
     return JSONResponse(
         {
