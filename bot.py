@@ -214,6 +214,38 @@ async def buy_bb_coupon(callback: CallbackQuery):
 
     await callback.answer()
 
+# =========================
+# PAY ORDER
+# =========================
+
+@dp.callback_query(F.data.startswith("pay_"))
+async def pay_order(callback: CallbackQuery):
+
+    order_id = callback.data.replace("pay_", "")
+
+    await callback.message.answer(
+        f"💳 Payment for Order {order_id}\n\n"
+        f"Cashfree integration coming next."
+    )
+
+    await callback.answer()
+
+
+# =========================
+# CANCEL ORDER
+# =========================
+
+@dp.callback_query(F.data.startswith("cancel_"))
+async def cancel_order(callback: CallbackQuery):
+
+    order_id = callback.data.replace("cancel_", "")
+
+    await callback.message.answer(
+        f"❌ Order {order_id} cancelled."
+    )
+
+    await callback.answer()    
+
 
 # =========================
 # MY ORDERS
