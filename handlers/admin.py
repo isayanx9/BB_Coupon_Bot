@@ -110,9 +110,9 @@ async def add_coupon_button(
     await message.answer(
         "📥 Send bulk coupons\n\n"
         "Format:\n"
-        "Coupon Name|Coupon Code|Discount|Minimum Order\n\n"
+        "Coupon Name|Coupon Code|Discount|Minimum Order|Price\n\n"
         "Example:\n"
-        "BigBasket Chocolate & Ice Cream|BB100ICE001|100|100"
+        "BigBasket Chocolate & Ice Cream|BB100ICE001|100|100|14"
     )
 
     await state.set_state(
@@ -144,15 +144,20 @@ async def process_bulk_coupon(
 
         try:
 
-            name, code, discount, minimum = (
-                line.split("|")
-            )
+            (
+                name,
+                code,
+                discount,
+                minimum,
+                price
+            ) = line.split("|")
 
             success = add_coupon(
                 name.strip(),
                 code.strip(),
                 int(discount),
-                int(minimum)
+                int(minimum),
+                int(price)
             )
 
             if success:

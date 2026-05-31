@@ -12,16 +12,19 @@ def add_coupon(
     coupon_name,
     coupon_code,
     discount_value,
-    minimum_order
+    minimum_order,
+    selling_price
 ):
     db = SessionLocal()
 
     try:
+
         coupon = Coupon(
             coupon_name=coupon_name,
             coupon_code=coupon_code,
             discount_value=discount_value,
-            minimum_order=minimum_order
+            minimum_order=minimum_order,
+            selling_price=selling_price
         )
 
         db.add(coupon)
@@ -30,10 +33,13 @@ def add_coupon(
         return True
 
     except Exception:
+
         db.rollback()
+
         return False
 
     finally:
+
         db.close()
 
 
@@ -284,5 +290,42 @@ def mark_coupon_sold(coupon_id):
         return False
 
     finally:
-        db.close()        
+        db.close()      
+
+def get_total_orders():
+    db = SessionLocal()
+
+    try:
+        return db.query(Order).count()
+
+    finally:
+        db.close()
+
+
+def get_pending_orders():
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(Order)
+            .filter(Order.payment_status == "PENDING")
+            .count()
+        )
+
+    finally:
+        db.close()
+
+
+def get_success_orders():
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(Order)
+            .filter(Order.payment_status == "SUCCESS")
+            .count()
+        )
+
+    finally:
+        db.close()          
 
