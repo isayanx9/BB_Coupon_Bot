@@ -282,7 +282,12 @@ async def support(message: Message):
 # MAIN FUNCTION
 # =========================
 
+from database.db import engine
+from database.models import Base
+
 async def main():
+
+    Base.metadata.create_all(bind=engine)
 
     bot = Bot(token=BOT_TOKEN)
 
