@@ -11,7 +11,10 @@ from config import (
 
 from handlers.admin import router as admin_router
 
-from keyboards.shop import buy_coupon_keyboard
+from keyboards.shop import (
+    buy_coupon_keyboard,
+    payment_keyboard
+)
 
 from database.crud import (
     create_order,
@@ -200,13 +203,14 @@ async def buy_bb_coupon(callback: CallbackQuery):
     )
 
     await callback.message.answer(
-        f"✅ Order Created\n\n"
-        f"🆔 Order ID: {order_id}\n\n"
-        f"🎟 Coupon:\n"
-        f"{coupon_name}\n\n"
-        f"💰 Amount: ₹{price}\n\n"
-        f"⏳ Status: Pending Payment"
-    )
+    f"✅ Order Created\n\n"
+    f"🆔 Order ID: {order_id}\n\n"
+    f"🎟 Coupon:\n"
+    f"{coupon_name}\n\n"
+    f"💰 Amount: ₹{price}\n\n"
+    f"⏳ Status: Pending Payment",
+    reply_markup=payment_keyboard(order_id)
+)
 
     await callback.answer()
 
