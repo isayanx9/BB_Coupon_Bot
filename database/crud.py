@@ -349,3 +349,94 @@ def get_coupon_price(coupon_name):
 
     finally:
         db.close()
+
+def get_order_by_id(order_id):
+
+    db = SessionLocal()
+
+    try:
+
+        return (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id
+            )
+            .first()
+        )
+
+    finally:
+        db.close()
+
+
+def update_order_status(
+    order_id,
+    status
+):
+
+    db = SessionLocal()
+
+    try:
+
+        order = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id
+            )
+            .first()
+        )
+
+        if order:
+
+            order.payment_status = status
+
+            db.commit()
+
+            return True
+
+        return False
+
+    except Exception:
+
+        db.rollback()
+
+        return False
+
+    finally:
+        db.close()
+
+
+def update_delivery_status(
+    order_id,
+    status
+):
+
+    db = SessionLocal()
+
+    try:
+
+        order = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id
+            )
+            .first()
+        )
+
+        if order:
+
+            order.delivery_status = status
+
+            db.commit()
+
+            return True
+
+        return False
+
+    except Exception:
+
+        db.rollback()
+
+        return False
+
+    finally:
+        db.close()        
