@@ -40,12 +40,6 @@ def create_cashfree_payment_link(
 
     data = response.json()
 
-    try:
+    print(data)
 
-        return data["payment_session_id"]
-
-    except Exception:
-
-        print(data)
-
-        return None
+    return data

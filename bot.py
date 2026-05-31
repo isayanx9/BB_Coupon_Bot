@@ -230,25 +230,14 @@ async def pay_order(callback: CallbackQuery):
         ""
     )
 
-    session_id = create_cashfree_payment_link(
+    data = create_cashfree_payment_link(
         order_id=order_id,
         amount=14,
         customer_id=callback.from_user.id
     )
 
-    if not session_id:
-
-        await callback.message.answer(
-            "❌ Payment initialization failed."
-        )
-
-        await callback.answer()
-        return
-
     await callback.message.answer(
-        f"💳 Payment Initialized\n\n"
-        f"Order: {order_id}\n\n"
-        f"Session ID:\n{session_id}"
+        f"💳 Cashfree Response\n\n{data}"
     )
 
     await callback.answer()
