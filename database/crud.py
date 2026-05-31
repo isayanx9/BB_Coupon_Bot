@@ -329,3 +329,23 @@ def get_success_orders():
     finally:
         db.close()          
 
+def get_coupon_price(coupon_name):
+    db = SessionLocal()
+
+    try:
+
+        coupon = (
+            db.query(Coupon)
+            .filter(
+                Coupon.coupon_name == coupon_name
+            )
+            .first()
+        )
+
+        if coupon:
+            return coupon.selling_price
+
+        return 14
+
+    finally:
+        db.close()

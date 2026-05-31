@@ -16,7 +16,8 @@ from keyboards.shop import buy_coupon_keyboard
 from database.crud import (
     create_order,
     get_coupon_stock,
-    get_user_orders
+    get_user_orders,
+    get_coupon_price
 )
 
 from keyboards.user import (
@@ -156,6 +157,10 @@ async def buy_coupons(message: Message):
         "BigBasket Chocolate & Ice Cream"
     )
 
+    price = get_coupon_price(
+        "BigBasket Chocolate & Ice Cream"
+    )
+
     await message.answer(
         f"🛒 Available Coupons\n\n"
         f"🍫 BigBasket Chocolate & Ice Cream\n\n"
@@ -169,8 +174,10 @@ async def buy_coupons(message: Message):
 @dp.callback_query(F.data == "buy_bb_coupon")
 async def buy_bb_coupon(callback: CallbackQuery):
 
+    coupon_name = "BigBasket Chocolate & Ice Cream"
+
     stock = get_coupon_stock(
-        "BigBasket Chocolate & Ice Cream"
+        coupon_name
     )
 
     if stock <= 0:
@@ -182,18 +189,22 @@ async def buy_bb_coupon(callback: CallbackQuery):
         await callback.answer()
         return
 
+    price = get_coupon_price(
+        coupon_name
+    )
+
     order_id = create_order(
         callback.from_user.id,
-        "BigBasket Chocolate & Ice Cream",
-        14
+        coupon_name,
+        price
     )
 
     await callback.message.answer(
         f"✅ Order Created\n\n"
         f"🆔 Order ID: {order_id}\n\n"
         f"🎟 Coupon:\n"
-        f"BigBasket Chocolate & Ice Cream\n\n"
-        f"💰 Amount: ₹14\n\n"
+        f"{coupon_name}\n\n"
+        f"💰 Amount: ₹{price}\n\n"
         f"⏳ Status: Pending Payment"
     )
 
