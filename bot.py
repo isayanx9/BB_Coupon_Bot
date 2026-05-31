@@ -23,6 +23,10 @@ from database.crud import (
     get_coupon_price
 )
 
+from database.payment import (
+    create_cashfree_payment_link
+)
+
 from keyboards.user import (
     join_keyboard,
     terms_keyboard,
@@ -221,11 +225,30 @@ async def buy_bb_coupon(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("pay_"))
 async def pay_order(callback: CallbackQuery):
 
-    order_id = callback.data.replace("pay_", "")
+    order_id = callback.data.replace(
+        "pay_",
+        ""
+    )
+
+    session_id = create_cashfree_payment_link(
+        order_id=order_id,
+        amount=14,
+        customer_id=callback.from_user.id
+    )
+
+    if not session_id:
+
+        await callback.message.answer(
+            "❌ Payment initialization failed."
+        )
+
+        await callback.answer()
+        return
 
     await callback.message.answer(
-        f"💳 Payment for Order {order_id}\n\n"
-        f"Cashfree integration coming next."
+        f"💳 Payment Initialized\n\n"
+        f"Order: {order_id}\n\n"
+        f"Session ID:\n{session_id}"
     )
 
     await callback.answer()
