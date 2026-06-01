@@ -242,14 +242,26 @@ async def pay_order(callback: CallbackQuery):
     print("CASHFREE RESPONSE:")
     print(data)
 
+    if "payment_session_id" not in data:
+
+        await callback.message.answer(
+            f"❌ Payment Error\n\n{data}"
+        )
+
+        await callback.answer()
+        return
+
+    session_id = data["payment_session_id"]
+
     await callback.message.answer(
         f"💳 Payment Initialized\n\n"
         f"🆔 Order: {order_id}\n"
-        f"💰 Amount: ₹1"
+        f"💰 Amount: ₹1\n\n"
+        f"🪪 Session ID:\n{session_id}"
     )
 
     await callback.answer()
-
+    
 # =========================
 # CANCEL ORDER
 # =========================
