@@ -356,6 +356,10 @@ async def main():
     Base.metadata.create_all(bind=engine)
 
     bot = Bot(token=BOT_TOKEN)
+    
+    await bot.delete_webhook(
+    drop_pending_updates=True
+)
 
     dp.include_router(admin_router)
 
