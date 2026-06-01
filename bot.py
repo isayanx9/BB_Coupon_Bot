@@ -224,12 +224,15 @@ async def buy_bb_coupon(callback: CallbackQuery):
 # PAY ORDER
 # =========================
 
-# =========================
-# PAY ORDER
-# =========================
+
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def pay_order(callback: CallbackQuery):
+
+    from aiogram.types import (
+        InlineKeyboardMarkup,
+        InlineKeyboardButton
+    )
 
     order_id = callback.data.replace(
         "pay_",
@@ -271,12 +274,23 @@ async def pay_order(callback: CallbackQuery):
         f"https://bbcouponbot-production.up.railway.app/pay/{order_id}"
     )
 
+    payment_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💳 Pay Now",
+                    url=payment_url
+                )
+            ]
+        ]
+    )
+
     await callback.message.answer(
         f"💳 Payment Ready\n\n"
         f"🆔 Order: {order_id}\n"
         f"💰 Amount: ₹{price}\n\n"
-        f"🔗 Payment Link:\n"
-        f"{payment_url}"
+        f"Click the button below to complete payment.",
+        reply_markup=payment_keyboard
     )
 
     await callback.answer()
