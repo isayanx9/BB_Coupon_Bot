@@ -12,7 +12,7 @@ def create_cashfree_payment_link(
     customer_id
 ):
 
-    url = "https://api.cashfree.com/pg/links"
+    url = "https://api.cashfree.com/pg/orders"
 
     headers = {
         "accept": "application/json",
@@ -23,14 +23,13 @@ def create_cashfree_payment_link(
     }
 
     payload = {
+        "order_id": order_id,
+        "order_amount": amount,
+        "order_currency": "INR",
         "customer_details": {
-            "customer_name": f"User_{customer_id}",
+            "customer_id": str(customer_id),
             "customer_phone": "9999999999"
-        },
-        "link_amount": amount,
-        "link_currency": "INR",
-        "link_id": order_id,
-        "link_purpose": f"Coupon Purchase {order_id}"
+        }
     }
 
     response = requests.post(
@@ -41,7 +40,7 @@ def create_cashfree_payment_link(
 
     data = response.json()
 
-    print("PAYMENT LINK RESPONSE:")
+    print("CASHFREE RESPONSE:")
     print(data)
 
     return data
