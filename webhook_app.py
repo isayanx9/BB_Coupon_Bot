@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 from aiogram import Bot
 
@@ -8,7 +8,8 @@ from config import BOT_TOKEN
 from database.crud import (
     get_order_by_id,
     update_order_status,
-    update_delivery_status
+    update_delivery_status,
+    get_payment_session
 )
 
 from services.coupon_service import (
@@ -26,6 +27,51 @@ async def home():
         "service": "BB Coupon Bot Webhook"
     }
 
+@app.get("/pay/{order_id}")
+async def pay_page(order_id: str):
+
+    session_id = get_payment_session(
+        order_id
+    )
+
+    if not session_id:
+
+        return HTMLResponse(
+            "<h1>Invalid Order</h1>",
+            status_code=404
+        )
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>BB Coupon Payment</title>
+
+        <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+    </head>
+
+    <body>
+
+        <h2>Redirecting to Payment...</h2>
+
+        <script>
+
+        const cashfree = Cashfree({{
+            mode: "production"
+        }});
+
+        cashfree.checkout({{
+            paymentSessionId: "{session_id}",
+            redirectTarget: "_self"
+        }});
+
+        </script>
+
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(html)
 
 @app.post("/webhook/cashfree")
 async def cashfree_webhook(request: Request):
