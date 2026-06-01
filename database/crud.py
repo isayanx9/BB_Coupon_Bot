@@ -440,3 +440,68 @@ def update_delivery_status(
 
     finally:
         db.close()        
+
+def save_payment_session(
+    order_id,
+    payment_session_id
+):
+
+    db = SessionLocal()
+
+    try:
+
+        order = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id
+            )
+            .first()
+        )
+
+        if order:
+
+            order.payment_session_id = (
+                payment_session_id
+            )
+
+            db.commit()
+
+            return True
+
+        return False
+
+    except Exception:
+
+        db.rollback()
+
+        return False
+
+    finally:
+
+        db.close()
+
+
+def get_payment_session(
+    order_id
+):
+
+    db = SessionLocal()
+
+    try:
+
+        order = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id
+            )
+            .first()
+        )
+
+        if order:
+            return order.payment_session_id
+
+        return None
+
+    finally:
+
+        db.close()

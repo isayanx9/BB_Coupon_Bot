@@ -20,7 +20,8 @@ from database.crud import (
     create_order,
     get_coupon_stock,
     get_user_orders,
-    get_coupon_price
+    get_coupon_price,
+    save_payment_session
 )
 
 from database.payment import (
@@ -223,6 +224,10 @@ async def buy_bb_coupon(callback: CallbackQuery):
 # PAY ORDER
 # =========================
 
+# =========================
+# PAY ORDER
+# =========================
+
 @dp.callback_query(F.data.startswith("pay_"))
 async def pay_order(callback: CallbackQuery):
 
@@ -257,11 +262,21 @@ async def pay_order(callback: CallbackQuery):
 
     session_id = data["payment_session_id"]
 
+    save_payment_session(
+        order_id,
+        session_id
+    )
+
+    payment_url = (
+        f"https://bbcouponbot-production.up.railway.app/pay/{order_id}"
+    )
+
     await callback.message.answer(
-        f"💳 Payment Initialized\n\n"
+        f"💳 Payment Ready\n\n"
         f"🆔 Order: {order_id}\n"
         f"💰 Amount: ₹{price}\n\n"
-        f"🪪 Session ID:\n{session_id}"
+        f"🔗 Payment Link:\n"
+        f"{payment_url}"
     )
 
     await callback.answer()
