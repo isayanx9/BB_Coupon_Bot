@@ -233,9 +233,13 @@ async def pay_order(callback: CallbackQuery):
 
     print(f"PAY ORDER CLICKED: {order_id}")
 
+    price = get_coupon_price(
+        "BigBasket Chocolate & Ice Cream"
+    )
+
     data = create_cashfree_payment_link(
         order_id=order_id,
-        amount=1,
+        amount=price,
         customer_id=callback.from_user.id
     )
 
@@ -256,7 +260,7 @@ async def pay_order(callback: CallbackQuery):
     await callback.message.answer(
         f"💳 Payment Initialized\n\n"
         f"🆔 Order: {order_id}\n"
-        f"💰 Amount: ₹1\n\n"
+        f"💰 Amount: ₹{price}\n\n"
         f"🪪 Session ID:\n{session_id}"
     )
 
