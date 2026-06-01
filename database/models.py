@@ -56,7 +56,6 @@ class Coupon(Base):
 
     minimum_order = Column(Integer)
 
-    # NEW
     selling_price = Column(
         Integer,
         default=14
@@ -95,6 +94,12 @@ class Order(Base):
 
     coupon_code = Column(
         String(255)
+    )
+
+    # NEW FIELD
+    payment_session_id = Column(
+        String(500),
+        nullable=True
     )
 
     amount = Column(
