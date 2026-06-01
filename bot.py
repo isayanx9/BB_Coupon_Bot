@@ -356,7 +356,7 @@ async def main():
     Base.metadata.create_all(bind=engine)
 
     bot = Bot(token=BOT_TOKEN)
-    
+
     await bot.delete_webhook(
     drop_pending_updates=True
 )
@@ -364,6 +364,10 @@ async def main():
     dp.include_router(admin_router)
 
     print("✅ BB Coupon Bot Started")
+    
+    me = await bot.get_me()
+    print(f"BOT USERNAME: @{me.username}")
+    print(f"BOT ID: {me.id}")
 
     await dp.start_polling(bot)
 
