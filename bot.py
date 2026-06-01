@@ -232,7 +232,7 @@ async def pay_order(callback: CallbackQuery):
 
     data = create_cashfree_payment_link(
         order_id=order_id,
-        amount=14,
+        amount=1,
         customer_id=callback.from_user.id
     )
 
