@@ -173,7 +173,8 @@ async def buy_coupons(message: Message):
         f"🍫 BigBasket Chocolate & Ice Cream\n\n"
         f"💰 ₹100 OFF\n"
         f"🛒 Minimum Order ₹100+\n"
-        f"📦 Stock Available: {stock}",
+        f"📦 Stock Available: {stock}\n"
+        f"💵 Price: ₹{price}",
         reply_markup=buy_coupon_keyboard()
     )
 
@@ -230,14 +231,21 @@ async def pay_order(callback: CallbackQuery):
         ""
     )
 
+    print(f"PAY ORDER CLICKED: {order_id}")
+
     data = create_cashfree_payment_link(
         order_id=order_id,
         amount=1,
         customer_id=callback.from_user.id
     )
 
+    print("CASHFREE RESPONSE:")
+    print(data)
+
     await callback.message.answer(
-        f"💳 Cashfree Response\n\n{data}"
+        f"💳 Payment Initialized\n\n"
+        f"🆔 Order: {order_id}\n"
+        f"💰 Amount: ₹1"
     )
 
     await callback.answer()
