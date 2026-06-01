@@ -89,12 +89,35 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
         ):
 
             await callback.message.edit_text(
-                "📜 Terms & Conditions\n\n"
-                "1. Coupons are non-refundable.\n"
-                "2. Expired coupons cannot be replaced.\n"
-                "3. Payment disputes must be reported within 24 hours.\n"
-                "4. By continuing, you agree to our terms.\n\n"
-                "Please choose:",
+                "╔════════════════════╗\n"
+                "📜 FLASHX TERMS OF USE\n"
+                "╚════════════════════╝\n\n"
+
+                "🛍️ Coupon Purchase Policy\n"
+                "• All coupon sales are final.\n"
+                "• No refunds after successful delivery.\n"
+                "• Coupons must be used before expiry.\n\n"
+
+                "⚡ Instant Delivery\n"
+                "• Coupons are delivered automatically.\n"
+                "• Delivery occurs after payment verification.\n"
+                "• Payment gateway delays may occur.\n\n"
+
+                "🛡️ Security & Fair Usage\n"
+                "• Fraudulent activity is prohibited.\n"
+                "• Chargebacks may result in permanent bans.\n"
+                "• Abuse of the system will lead to restrictions.\n\n"
+
+                "💳 Payments\n"
+                "• Payments are processed securely.\n"
+                "• Failed payments will not generate coupons.\n"
+                "• Contact support if payment succeeds but delivery fails.\n\n"
+
+                "📞 Support\n"
+                "• Report issues within 24 hours.\n"
+                "• Keep your Order ID for support requests.\n\n"
+
+                "✅ By clicking ACCEPT, you agree to all Terms & Conditions.",
                 reply_markup=terms_keyboard()
             )
 
@@ -113,7 +136,7 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
             "❌ Please join Channel and Group first.",
             show_alert=True
         )
-
+        
 
 # =========================
 # ACCEPT TERMS
