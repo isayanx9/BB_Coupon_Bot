@@ -113,15 +113,38 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
     user_id = callback.from_user.id
 
     try:
-        channel_member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        group_member = await bot.get_chat_member(GROUP_USERNAME, user_id)
-        valid_status = ["member", "administrator", "creator"]
+        print("CHANNEL_USERNAME =", CHANNEL_USERNAME)
+        print("GROUP_USERNAME =", GROUP_USERNAME)
+
+        print("Checking channel...")
+        channel_member = await bot.get_chat_member(
+            CHANNEL_USERNAME,
+            user_id
+        )
+        print("Channel OK")
+
+        print("Checking group...")
+        group_member = await bot.get_chat_member(
+            GROUP_USERNAME,
+            user_id
+        )
+        print("Group OK")
+
+        valid_status = [
+            "member",
+            "administrator",
+            "creator"
+        ]
 
         if (
             channel_member.status in valid_status
             and group_member.status in valid_status
         ):
-            await flash_effect(callback, FLASH_VERIFY_TEXT)
+            await flash_effect(
+                callback,
+                FLASH_VERIFY_TEXT
+            )
+
             await callback.message.edit_text(
                 TERMS_TEXT,
                 reply_markup=terms_keyboard(),
@@ -133,7 +156,12 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
             )
 
     except Exception as error:
-        print(f"Verification error: {error}")
+        print("========== VERIFY ERROR ==========")
+        print(error)
+        print("CHANNEL =", CHANNEL_USERNAME)
+        print("GROUP =", GROUP_USERNAME)
+        print("==================================")
+
         await callback.answer(
             "Please join the channel and support group first.",
             show_alert=True,
