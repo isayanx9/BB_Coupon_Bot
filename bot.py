@@ -18,10 +18,15 @@ from config import (
 )
 from database.crud import (
     create_order,
+    get_bot_setting,
+    get_coupon_by_id,
     get_coupon_price,
     get_coupon_stock,
+    get_coupon_type_options,
     get_user_orders,
+    is_user_banned,
     save_payment_session,
+    track_user,
     update_order_status,
 )
 from database.db import engine
@@ -30,6 +35,7 @@ from database.payment import create_cashfree_payment_link
 from handlers.admin import router as admin_router
 from keyboards.shop import (
     buy_coupon_keyboard,
+    coupon_list_keyboard,
     payment_keyboard,
 )
 from keyboards.user import (
@@ -68,8 +74,34 @@ async def flash_effect(callback: CallbackQuery, text: str):
         pass
 
 
+async def reject_if_banned(message: Message):
+    track_user(
+        message.from_user.id,
+        message.from_user.username
+    )
+
+    if is_user_banned(message.from_user.id):
+        await message.answer(
+            "🚫 <b>Access blocked.</b>\n\n"
+            "<blockquote>Your account is restricted. Contact support if this is a mistake.</blockquote>"
+        )
+        return True
+
+    if get_bot_setting("maintenance_mode", "off").lower() == "on":
+        await message.answer(
+            "🛠 <b>Maintenance mode</b>\n\n"
+            f"<blockquote>{get_bot_setting('maintenance_text', 'Cutie is upgrading the bot. Please try again soon.')}</blockquote>"
+        )
+        return True
+
+    return False
+
+
 @dp.message(CommandStart())
 async def start_command(message: Message):
+    if await reject_if_banned(message):
+        return
+
     await message.answer(
         WELCOME_TEXT,
         reply_markup=join_keyboard(),
@@ -110,6 +142,15 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
 
 @dp.callback_query(F.data == "accept_terms")
 async def accept_terms(callback: CallbackQuery):
+    track_user(
+        callback.from_user.id,
+        callback.from_user.username
+    )
+
+    if is_user_banned(callback.from_user.id):
+        await callback.answer("Access blocked.", show_alert=True)
+        return
+
     await flash_effect(callback, FLASH_ACCEPT_TEXT)
     await callback.message.edit_text(
         "✨ <b>Terms accepted.</b>\n\n"
@@ -140,18 +181,32 @@ async def decline_terms(callback: CallbackQuery):
 
 @dp.message(F.text == BTN_DEAL_VAULT)
 async def buy_coupons(message: Message):
-    stock = get_coupon_stock(COUPON_NAME)
-    price = get_coupon_price(COUPON_NAME)
+    if await reject_if_banned(message):
+        return
+
+    options = get_coupon_type_options()
+
+    if not options:
+        await message.answer(
+            "😔 <b>No active coupons right now.</b>\n\n"
+            "<blockquote>Cutie will show deals here as soon as admin uploads stock.</blockquote>"
+        )
+        return
+
+    lines = []
+
+    for option in options[:12]:
+        lines.append(
+            f"🎟 <code>{option['coupon_name']}</code>\n"
+            f"💎 Rs {option['discount']} OFF • Min Rs {option['minimum']}\n"
+            f"📦 Stock <b>{option['stock']}</b> • 💰 Price <b>Rs {option['price']}</b>"
+        )
 
     await message.answer(
         "⚡ <b>Premium Deal Vault</b>\n\n"
-        f"<blockquote>🎟 <code>{COUPON_NAME}</code>\n"
-        "💎 Rs 100 OFF\n"
-        "🛒 Minimum Order: Rs 100+\n"
-        f"📦 Stock Available: <b>{stock}</b>\n"
-        f"💰 Price: <b>Rs {price}</b></blockquote>\n\n"
+        f"<blockquote>{chr(10).join(lines)}</blockquote>\n\n"
         "<i>Cutie says: tap Buy Now and I will prepare it fast.</i>",
-        reply_markup=buy_coupon_keyboard(),
+        reply_markup=coupon_list_keyboard(options[:12]),
     )
 
 
@@ -191,13 +246,72 @@ async def buy_bb_coupon(callback: CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data.startswith("buy_type_"))
+async def buy_coupon_type(callback: CallbackQuery):
+    if is_user_banned(callback.from_user.id):
+        await callback.answer("Access blocked.", show_alert=True)
+        return
+
+    await flash_effect(callback, FLASH_ORDER_TEXT)
+    coupon_id = int(callback.data.replace("buy_type_", ""))
+    coupon = get_coupon_by_id(coupon_id)
+
+    if not coupon or coupon.sold:
+        await callback.message.answer(
+            "😔 <b>This coupon just went out of stock.</b>\n\n"
+            "<blockquote>Open Deal Vault again for fresh options.</blockquote>"
+        )
+        await callback.answer()
+        return
+
+    stock = get_coupon_stock(coupon.coupon_name)
+
+    if stock <= 0:
+        await callback.message.answer("😔 <b>Out of stock.</b>")
+        await callback.answer()
+        return
+
+    order_id = create_order(
+        callback.from_user.id,
+        coupon.coupon_name,
+        coupon.selling_price,
+    )
+
+    if not order_id:
+        await callback.message.answer(
+            "💔 <b>Order creation failed.</b>\n\n"
+            "<blockquote>Please try again or contact support.</blockquote>"
+        )
+        await callback.answer()
+        return
+
+    await callback.message.answer(
+        "✨ <b>Order Created</b>\n\n"
+        f"<blockquote>🆔 Order ID: <code>{order_id}</code>\n"
+        f"🎟 Coupon: <code>{coupon.coupon_name}</code>\n"
+        f"💰 Amount: <b>Rs {coupon.selling_price}</b>\n"
+        "⏳ Status: <i>Pending Payment</i></blockquote>",
+        reply_markup=payment_keyboard(order_id),
+    )
+    await callback.answer()
+
+
 @dp.callback_query(F.data.startswith("pay_"))
 async def pay_order(callback: CallbackQuery):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
     order_id = callback.data.replace("pay_", "")
-    price = get_coupon_price(COUPON_NAME)
     await flash_effect(callback, FLASH_PAYMENT_TEXT)
+    from database.crud import get_order_by_id
+
+    order = get_order_by_id(order_id)
+
+    if not order:
+        await callback.message.answer("💔 <b>Order not found.</b>")
+        await callback.answer()
+        return
+
+    price = order.amount
 
     data = create_cashfree_payment_link(
         order_id=order_id,
@@ -251,6 +365,9 @@ async def cancel_order(callback: CallbackQuery):
 
 @dp.message(F.text == BTN_ACCESS_LOG)
 async def my_orders(message: Message):
+    if await reject_if_banned(message):
+        return
+
     orders = get_user_orders(message.from_user.id)
 
     if not orders:
@@ -273,6 +390,9 @@ async def my_orders(message: Message):
 
 @dp.message(F.text == BTN_PROFILE)
 async def profile(message: Message):
+    if await reject_if_banned(message):
+        return
+
     user = message.from_user
 
     await message.answer(
@@ -294,6 +414,9 @@ async def referral(message: Message):
 
 @dp.message(F.text == BTN_SUPPORT)
 async def support(message: Message):
+    if await reject_if_banned(message):
+        return
+
     await message.answer(
         "📢 <b>Support</b>\n\n"
         f"<blockquote>💬 Contact: <code>{GROUP_USERNAME}</code>\n"
@@ -304,6 +427,9 @@ async def support(message: Message):
 
 @dp.message(F.text == BTN_AI_ASSIST)
 async def ai_assist_start(message: Message, state: FSMContext):
+    if await reject_if_banned(message):
+        return
+
     await state.set_state(AIAssist.waiting_for_question)
     await message.answer(
         "💖 <b>Cutie AI</b>\n\n"

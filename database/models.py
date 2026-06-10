@@ -36,6 +36,40 @@ class User(Base):
     )
 
 
+class BannedUser(Base):
+    __tablename__ = "banned_users"
+
+    id = Column(Integer, primary_key=True)
+
+    telegram_id = Column(
+        BigInteger,
+        unique=True
+    )
+
+    reason = Column(
+        String(255),
+        default="Admin ban"
+    )
+
+    banned_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+
+class BotSetting(Base):
+    __tablename__ = "bot_settings"
+
+    id = Column(Integer, primary_key=True)
+
+    key = Column(
+        String(100),
+        unique=True
+    )
+
+    value = Column(String(1000))
+
+
 # =========================
 # COUPONS
 # =========================
