@@ -22,7 +22,7 @@ async def home():
     return {
         "status": "running",
         "service": "BB Coupon Bot",
-        "ai_assist": "enabled",
+        "ai_assist": "Cutie enabled",
     }
 
 
@@ -41,7 +41,7 @@ async def pay_page(order_id: str):
                     body {
                         font-family: Arial, sans-serif;
                         background: #fff7ed;
-                        color: #9a3412;
+                    color: #9a3412;
                         display: grid;
                         min-height: 100vh;
                         place-items: center;
@@ -61,7 +61,7 @@ async def pay_page(order_id: str):
             </head>
             <body>
                 <main>
-                    <h1>Invalid Order</h1>
+                    <h1>Cutie paused this checkout</h1>
                     <p><strong>This payment link is not active.</strong></p>
                     <p><em>Please return to Telegram and create a fresh order.</em></p>
                 </main>
@@ -84,7 +84,7 @@ async def pay_page(order_id: str):
             body {{
                 margin: 0;
                 font-family: Arial, sans-serif;
-                background: #ecfeff;
+                background: radial-gradient(circle at top, #fef3c7 0, #ecfeff 35%, #ffffff 100%);
                 color: #164e63;
                 display: grid;
                 min-height: 100vh;
@@ -97,6 +97,7 @@ async def pay_page(order_id: str):
                 border-radius: 8px;
                 background: #ffffff;
                 box-shadow: 0 20px 60px rgba(8, 47, 73, 0.14);
+                animation: flashIn 700ms ease-out;
             }}
             h1 {{
                 margin-top: 0;
@@ -116,16 +117,21 @@ async def pay_page(order_id: str):
                 color: #0369a1;
                 font-weight: 700;
             }}
+            @keyframes flashIn {{
+                0% {{ transform: scale(0.97); box-shadow: 0 0 0 rgba(14, 165, 233, 0); }}
+                45% {{ transform: scale(1.01); box-shadow: 0 0 38px rgba(14, 165, 233, 0.32); }}
+                100% {{ transform: scale(1); box-shadow: 0 20px 60px rgba(8, 47, 73, 0.14); }}
+            }}
         </style>
     </head>
     <body>
         <main>
-            <h1>BB Coupon Payment</h1>
+            <h1>⚡ BB Coupon Payment</h1>
             <blockquote>
-                <strong>Redirecting to secure checkout.</strong><br>
+                <strong>Cutie prepared your secure checkout.</strong><br>
                 <em>Order ID:</em> <code>{order_id}</code>
             </blockquote>
-            <p class="status">Please wait. Do not close this page.</p>
+            <p class="status">Flash redirect is starting. Please do not close this page.</p>
         </main>
 
         <script>
@@ -183,11 +189,11 @@ async def cashfree_webhook(request: Request):
                     await bot.send_message(
                         chat_id=order.user_id,
                         text=(
-                            "<b>Payment Successful</b>\n\n"
-                            f"<blockquote>Order: <code>{order.order_id}</code>\n"
-                            "Coupon Code:\n"
+                            "🎉 <b>Payment Successful</b>\n\n"
+                            f"<blockquote>🆔 Order: <code>{order.order_id}</code>\n"
+                            "🎟 Coupon Code:\n"
                             f"<code>{coupon_code}</code></blockquote>\n\n"
-                            "<i>Thank you for purchasing.</i>"
+                            "<i>Cutie delivered it for you. Thank you for purchasing.</i>"
                         ),
                     )
 

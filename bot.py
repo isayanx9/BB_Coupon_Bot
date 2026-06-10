@@ -48,11 +48,24 @@ from texts import (
     BTN_PROFILE,
     BTN_SUPPORT,
     COUPON_NAME,
+    FLASH_ACCEPT_TEXT,
+    FLASH_CANCEL_TEXT,
+    FLASH_ORDER_TEXT,
+    FLASH_PAYMENT_TEXT,
+    FLASH_VERIFY_TEXT,
     TERMS_TEXT,
     WELCOME_TEXT,
 )
 
 dp = Dispatcher()
+
+
+async def flash_effect(callback: CallbackQuery, text: str):
+    try:
+        await callback.message.edit_text(text)
+        await asyncio.sleep(0.35)
+    except Exception:
+        pass
 
 
 @dp.message(CommandStart())
@@ -76,6 +89,7 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
             channel_member.status in valid_status
             and group_member.status in valid_status
         ):
+            await flash_effect(callback, FLASH_VERIFY_TEXT)
             await callback.message.edit_text(
                 TERMS_TEXT,
                 reply_markup=terms_keyboard(),
@@ -96,8 +110,10 @@ async def verify_user(callback: CallbackQuery, bot: Bot):
 
 @dp.callback_query(F.data == "accept_terms")
 async def accept_terms(callback: CallbackQuery):
+    await flash_effect(callback, FLASH_ACCEPT_TEXT)
     await callback.message.edit_text(
-        "<b>Terms accepted.</b>\n\n<i>Welcome to BB Coupon Bot.</i>"
+        "✨ <b>Terms accepted.</b>\n\n"
+        "<blockquote>Cutie AI has unlocked your premium coupon dashboard.</blockquote>"
     )
 
     menu = (
@@ -107,7 +123,7 @@ async def accept_terms(callback: CallbackQuery):
     )
 
     await callback.message.answer(
-        "<b>Main Menu</b>",
+        "🏠 <b>Main Menu</b>",
         reply_markup=menu,
     )
     await callback.answer()
@@ -115,8 +131,9 @@ async def accept_terms(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "decline_terms")
 async def decline_terms(callback: CallbackQuery):
+    await flash_effect(callback, "🚫 <b>ACCESS PAUSED</b>\n\n<blockquote>Cutie will wait until you are ready.</blockquote>")
     await callback.message.edit_text(
-        "<b>You must accept the Terms and Conditions to use this bot.</b>"
+        "🚫 <b>You must accept the Terms and Conditions to use this bot.</b>"
     )
     await callback.answer()
 
@@ -127,23 +144,24 @@ async def buy_coupons(message: Message):
     price = get_coupon_price(COUPON_NAME)
 
     await message.answer(
-        "<b>Available Coupon</b>\n\n"
-        f"<blockquote><code>{COUPON_NAME}</code>\n"
-        "Rs 100 OFF\n"
-        "Minimum Order: Rs 100+\n"
-        f"Stock Available: <b>{stock}</b>\n"
-        f"Price: <b>Rs {price}</b></blockquote>\n\n"
-        "<i>Tap Buy Now to create an order.</i>",
+        "⚡ <b>Premium Deal Vault</b>\n\n"
+        f"<blockquote>🎟 <code>{COUPON_NAME}</code>\n"
+        "💎 Rs 100 OFF\n"
+        "🛒 Minimum Order: Rs 100+\n"
+        f"📦 Stock Available: <b>{stock}</b>\n"
+        f"💰 Price: <b>Rs {price}</b></blockquote>\n\n"
+        "<i>Cutie says: tap Buy Now and I will prepare it fast.</i>",
         reply_markup=buy_coupon_keyboard(),
     )
 
 
 @dp.callback_query(F.data == "buy_bb_coupon")
 async def buy_bb_coupon(callback: CallbackQuery):
+    await flash_effect(callback, FLASH_ORDER_TEXT)
     stock = get_coupon_stock(COUPON_NAME)
 
     if stock <= 0:
-        await callback.message.answer("<b>Out of stock.</b>")
+        await callback.message.answer("😔 <b>Out of stock.</b>\n\n<blockquote>Cutie will watch for the next refill.</blockquote>")
         await callback.answer()
         return
 
@@ -156,17 +174,18 @@ async def buy_bb_coupon(callback: CallbackQuery):
 
     if not order_id:
         await callback.message.answer(
-            "<b>Order creation failed.</b>\n\nPlease try again or contact support."
+            "💔 <b>Order creation failed.</b>\n\n"
+            "<blockquote>Please try again or contact support. Cutie saved the error path.</blockquote>"
         )
         await callback.answer()
         return
 
     await callback.message.answer(
-        "<b>Order Created</b>\n\n"
-        f"<blockquote>Order ID: <code>{order_id}</code>\n"
-        f"Coupon: <code>{COUPON_NAME}</code>\n"
-        f"Amount: <b>Rs {price}</b>\n"
-        "Status: <i>Pending Payment</i></blockquote>",
+        "✨ <b>Order Created</b>\n\n"
+        f"<blockquote>🆔 Order ID: <code>{order_id}</code>\n"
+        f"🎟 Coupon: <code>{COUPON_NAME}</code>\n"
+        f"💰 Amount: <b>Rs {price}</b>\n"
+        "⏳ Status: <i>Pending Payment</i></blockquote>",
         reply_markup=payment_keyboard(order_id),
     )
     await callback.answer()
@@ -178,6 +197,7 @@ async def pay_order(callback: CallbackQuery):
 
     order_id = callback.data.replace("pay_", "")
     price = get_coupon_price(COUPON_NAME)
+    await flash_effect(callback, FLASH_PAYMENT_TEXT)
 
     data = create_cashfree_payment_link(
         order_id=order_id,
@@ -187,7 +207,7 @@ async def pay_order(callback: CallbackQuery):
 
     if "payment_session_id" not in data:
         await callback.message.answer(
-            "<b>Payment Error</b>\n\n"
+            "💔 <b>Payment Error</b>\n\n"
             f"<code>{data}</code>"
         )
         await callback.answer()
@@ -200,7 +220,7 @@ async def pay_order(callback: CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Pay Now",
+                    text="💳 Pay Securely",
                     url=payment_url,
                 )
             ]
@@ -208,10 +228,10 @@ async def pay_order(callback: CallbackQuery):
     )
 
     await callback.message.answer(
-        "<b>Payment Ready</b>\n\n"
-        f"<blockquote>Order: <code>{order_id}</code>\n"
-        f"Amount: <b>Rs {price}</b></blockquote>\n\n"
-        "<i>Click the button below to complete payment securely.</i>",
+        "💳 <b>Payment Ready</b>\n\n"
+        f"<blockquote>🆔 Order: <code>{order_id}</code>\n"
+        f"💰 Amount: <b>Rs {price}</b></blockquote>\n\n"
+        "<i>Cutie prepared your secure checkout.</i>",
         reply_markup=markup,
     )
     await callback.answer()
@@ -220,10 +240,11 @@ async def pay_order(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("cancel_"))
 async def cancel_order(callback: CallbackQuery):
     order_id = callback.data.replace("cancel_", "")
+    await flash_effect(callback, FLASH_CANCEL_TEXT)
     update_order_status(order_id, "CANCELLED")
 
     await callback.message.answer(
-        f"<b>Order cancelled.</b>\n\nOrder ID: <code>{order_id}</code>"
+        f"🚫 <b>Order cancelled.</b>\n\nOrder ID: <code>{order_id}</code>"
     )
     await callback.answer()
 
@@ -233,18 +254,18 @@ async def my_orders(message: Message):
     orders = get_user_orders(message.from_user.id)
 
     if not orders:
-        await message.answer("<b>No orders found.</b>")
+        await message.answer("📂 <b>No orders found.</b>\n\n<blockquote>Cutie is ready when you make your first deal.</blockquote>")
         return
 
-    text = "<b>Your Orders</b>\n\n"
+    text = "📂 <b>Your Orders</b>\n\n"
 
     for order in orders[:10]:
         text += (
-            f"<blockquote>Order: <code>{order.order_id}</code>\n"
-            f"Coupon: <code>{order.coupon_name}</code>\n"
-            f"Amount: <b>Rs {order.amount}</b>\n"
-            f"Payment: <i>{order.payment_status}</i>\n"
-            f"Delivery: <i>{order.delivery_status}</i></blockquote>\n"
+            f"<blockquote>🆔 Order: <code>{order.order_id}</code>\n"
+            f"🎟 Coupon: <code>{order.coupon_name}</code>\n"
+            f"💰 Amount: <b>Rs {order.amount}</b>\n"
+            f"💳 Payment: <i>{order.payment_status}</i>\n"
+            f"🚚 Delivery: <i>{order.delivery_status}</i></blockquote>\n"
         )
 
     await message.answer(text)
@@ -255,16 +276,17 @@ async def profile(message: Message):
     user = message.from_user
 
     await message.answer(
-        "<b>Profile</b>\n\n"
-        f"<blockquote>ID: <code>{user.id}</code>\n"
-        f"Name: <b>{user.first_name}</b></blockquote>"
+        "⚙️ <b>Profile</b>\n\n"
+        f"<blockquote>🆔 ID: <code>{user.id}</code>\n"
+        f"💖 Name: <b>{user.first_name}</b>\n"
+        "🤖 Assistant: <b>Cutie AI</b></blockquote>"
     )
 
 
 @dp.message(F.text == "Referral")
 async def referral(message: Message):
     await message.answer(
-        "<b>Referral Program</b>\n\n"
+        "🎁 <b>Referral Program</b>\n\n"
         "<i>Your referral link:</i>\n"
         f"<code>https://t.me/{BOT_USERNAME}?start={message.from_user.id}</code>"
     )
@@ -273,9 +295,10 @@ async def referral(message: Message):
 @dp.message(F.text == BTN_SUPPORT)
 async def support(message: Message):
     await message.answer(
-        "<b>Support</b>\n\n"
-        f"<blockquote>Contact: <code>{GROUP_USERNAME}</code>\n"
-        "Send your Order ID and payment screenshot if delivery failed.</blockquote>"
+        "📢 <b>Support</b>\n\n"
+        f"<blockquote>💬 Contact: <code>{GROUP_USERNAME}</code>\n"
+        "Send your Order ID and payment screenshot if delivery failed.\n"
+        "Cutie will help you explain the issue clearly.</blockquote>"
     )
 
 
@@ -283,9 +306,10 @@ async def support(message: Message):
 async def ai_assist_start(message: Message, state: FSMContext):
     await state.set_state(AIAssist.waiting_for_question)
     await message.answer(
-        "<b>AI Assist</b>\n\n"
-        "<blockquote>Ask about payments, order status, coupon delivery, stock, "
-        "bugs, or admin uploads.</blockquote>\n\n"
+        "💖 <b>Cutie AI</b>\n\n"
+        "<blockquote>I can sense worried, confused, excited, or upset messages "
+        "and reply with the right support style. Ask me about payments, orders, "
+        "coupon delivery, stock, bugs, or admin uploads.</blockquote>\n\n"
         "<i>Send your question now.</i>"
     )
 

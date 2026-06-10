@@ -1,71 +1,136 @@
-import requests
+from functools import lru_cache
 from html import escape
 
+import requests
+
 from config import OPENAI_API_KEY, OPENAI_MODEL
-from texts import COUPON_NAME
+from texts import AI_NAME, COUPON_NAME
 
 
 SYSTEM_PROMPT = (
-    "You are BB Coupon Bot AI Assist. Help users with coupon buying, order "
-    "status, payment delay guidance, support steps, and basic admin workflow. "
-    "Be concise, truthful, and never claim you can directly change production "
-    "unless the admin takes action."
+    f"You are {AI_NAME}, BB Coupon Bot's emotional AI assistant. You are warm, "
+    "sweet, premium, and concise. You help users with coupon buying, order "
+    "status, payment delay guidance, support steps, bug reports, and admin "
+    "workflow. Detect the user's emotion and respond with empathy. Do not "
+    "claim you can directly edit production or guarantee bug fixes unless an "
+    "admin deploys changes."
 )
 
+EMOTION_KEYWORDS = {
+    "worried": ["stuck", "help", "not delivered", "missing", "waiting", "delay"],
+    "upset": ["angry", "bad", "fraud", "scam", "hate", "wrong"],
+    "excited": ["wow", "nice", "great", "love", "awesome", "fast"],
+    "confused": ["how", "where", "what", "why", "confused", "don't know"],
+}
 
-def local_ai_answer(question):
+INTENT_KEYWORDS = {
+    "payment": ["payment", "paid", "cashfree", "money", "debited", "upi"],
+    "coupon": ["coupon", "code", "buy", "stock", "deal", "vault"],
+    "bug": ["bug", "error", "fix", "issue", "broken", "crash"],
+    "admin": ["admin", "upload", "inventory", "panel", "developer"],
+    "order": ["order", "status", "delivery", "delivered", "pending"],
+}
+
+
+def detect_emotion(question):
     normalized = question.lower()
 
-    if any(word in normalized for word in ["payment", "paid", "cashfree"]):
-        return (
-            "<b>Payment help</b>\n"
-            "<blockquote>If payment succeeded but the coupon was not delivered, "
-            "send your Order ID to support. Delivery depends on Cashfree webhook "
-            "confirmation.</blockquote>"
-        )
+    scores = {
+        emotion: sum(word in normalized for word in words)
+        for emotion, words in EMOTION_KEYWORDS.items()
+    }
 
-    if any(word in normalized for word in ["coupon", "code", "buy", "stock"]):
-        return (
-            "<b>Coupon help</b>\n"
-            f"The current product is <code>{COUPON_NAME}</code>.\n"
-            "Open <b>Deal Vault</b>, create an order, then pay from the secure "
-            "payment button."
-        )
+    emotion = max(scores, key=scores.get)
+    return emotion if scores[emotion] else "calm"
 
-    if any(word in normalized for word in ["bug", "error", "fix", "issue"]):
-        return (
-            "<b>Bug support</b>\n"
-            "<i>I can help diagnose common bot issues.</i>\n"
-            "Send the error message, Order ID, and what button you pressed. "
-            "The admin can then update and redeploy the bot."
-        )
 
-    if any(word in normalized for word in ["admin", "upload", "inventory"]):
-        return (
-            "<b>Admin help</b>\n"
-            "Use <b>Control Center</b> to upload coupons in this format:\n"
+def detect_intent(question):
+    normalized = question.lower()
+
+    scores = {
+        intent: sum(word in normalized for word in words)
+        for intent, words in INTENT_KEYWORDS.items()
+    }
+
+    intent = max(scores, key=scores.get)
+    return intent if scores[intent] else "general"
+
+
+def emotion_prefix(emotion):
+    prefixes = {
+        "worried": "💖 I feel that worry. Cutie is here with you.",
+        "upset": "🫶 I get why that feels frustrating. Let us fix the path.",
+        "excited": "✨ Love that energy. Cutie is ready.",
+        "confused": "🌸 No stress. I will make it simple.",
+        "calm": "💖 Cutie is online and listening.",
+    }
+    return prefixes.get(emotion, prefixes["calm"])
+
+
+@lru_cache(maxsize=256)
+def local_ai_answer(question):
+    emotion = detect_emotion(question)
+    intent = detect_intent(question)
+    prefix = emotion_prefix(emotion)
+
+    if intent == "payment":
+        body = (
+            "If payment succeeded but the coupon was not delivered, send your "
+            "Order ID and payment screenshot to support. Delivery waits for "
+            "Cashfree webhook confirmation, so gateway delay can happen."
+        )
+    elif intent == "coupon":
+        body = (
+            f"The current premium coupon is <code>{COUPON_NAME}</code>. Open "
+            "<b>Deal Vault</b>, tap <b>Buy Now</b>, then complete the secure "
+            "payment checkout."
+        )
+    elif intent == "bug":
+        body = (
+            "Send the exact error, button name, Order ID if any, and what you "
+            "expected. I can guide the report so the admin can patch and "
+            "redeploy the bot faster."
+        )
+    elif intent == "admin":
+        body = (
+            "Open <b>Control Center</b> and upload inventory like this:\n"
             f"<code>{COUPON_NAME}|BB100ICE001|100|100|14</code>"
+        )
+    elif intent == "order":
+        body = (
+            "Open <b>Access Log</b> to see your latest orders. If payment is "
+            "<i>SUCCESS</i> but delivery is not complete, contact support with "
+            "the Order ID."
+        )
+    else:
+        body = (
+            "Ask me about payments, orders, coupon stock, delivery, bugs, or "
+            "admin uploads. I use a small local machine-learning style keyword "
+            "model here, and deep AI answers when OpenAI is configured."
         )
 
     return (
-        "<b>AI Assist</b>\n"
-        "<blockquote>I can help with orders, payments, coupon delivery, stock, "
-        "support, and admin upload steps.</blockquote>\n"
-        "Please send your question with any Order ID or error text."
+        f"<b>{AI_NAME} AI</b> 💖\n"
+        f"<blockquote>{prefix}\n\n{body}</blockquote>"
     )
 
 
 def get_ai_answer(question):
+    cleaned_question = (question or "").strip()
+
+    if not cleaned_question:
+        return local_ai_answer("")
+
     if not OPENAI_API_KEY:
-        return local_ai_answer(question)
+        return local_ai_answer(cleaned_question)
 
     payload = {
         "model": OPENAI_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question},
+            {"role": "user", "content": cleaned_question},
         ],
-        "temperature": 0.2,
+        "temperature": 0.35,
     }
 
     try:
@@ -81,8 +146,8 @@ def get_ai_answer(question):
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         return (
-            "<b>AI Assist</b>\n"
+            f"<b>{AI_NAME} AI</b> 💖\n"
             f"<blockquote>{escape(content.strip())}</blockquote>"
         )
     except Exception:
-        return local_ai_answer(question)
+        return local_ai_answer(cleaned_question)
