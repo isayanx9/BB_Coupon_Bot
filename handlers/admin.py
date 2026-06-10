@@ -2,206 +2,156 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
-from states.order_states import CouponUpload
-
+from config import ADMIN_ID
 from database.crud import (
     add_coupon,
+    get_cancelled_orders,
+    get_completed_orders,
+    get_failed_orders,
+    get_pending_orders,
     get_total_coupons,
     get_total_orders,
     get_total_revenue,
-    get_pending_orders,
-    get_completed_orders,
-    get_failed_orders,
-    get_cancelled_orders
 )
-
-from config import ADMIN_ID
-
 from keyboards.admin import developer_menu
-
 from keyboards.user import (
     admin_main_menu,
-    user_main_menu
+    user_main_menu,
+)
+from states.order_states import CouponUpload
+from texts import (
+    BTN_ADD_COUPON,
+    BTN_BROADCAST,
+    BTN_CONTROL_CENTER,
+    BTN_EXIT_DEVELOPER,
+    BTN_INVENTORY,
+    BTN_MAIN_MENU,
+    BTN_ORDERS,
+    BTN_PAYMENTS,
+    BTN_SETTINGS,
+    BTN_STATISTICS,
+    BTN_USERS,
+    COUPON_NAME,
 )
 
 router = Router()
 
 
-# =========================
-# DEVELOPER COMMAND
-# =========================
-
 @router.message(F.text == "/developer")
 async def developer_panel(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
-        await message.answer("❌ Developer Only")
+        await message.answer("<b>Developer only.</b>")
         return
 
     await message.answer(
-        "🛠 Developer Panel",
-        reply_markup=developer_menu()
+        "<b>FLASH-X Control Center</b>",
+        reply_markup=developer_menu(),
     )
 
 
-# =========================
-# DEVELOPER BUTTON
-# =========================
-
-@router.message(F.text == "🛠 Developer")
+@router.message(F.text == BTN_CONTROL_CENTER)
 async def developer_button(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
-        await message.answer("❌ Developer Only")
+        await message.answer("<b>Access denied.</b>")
         return
 
     await message.answer(
-        "🛠 Developer Panel",
-        reply_markup=developer_menu()
+        "<b>Developer Panel</b>",
+        reply_markup=developer_menu(),
     )
 
 
-# =========================
-# MAIN MENU
-# =========================
-
-@router.message(F.text == "🏠 Main Menu")
+@router.message(F.text == BTN_MAIN_MENU)
 async def main_menu_button(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     await message.answer(
-        "🏠 Main Menu",
-        reply_markup=admin_main_menu()
+        "<b>Main Menu</b>",
+        reply_markup=admin_main_menu(),
     )
 
 
-# =========================
-# EXIT DEVELOPER PANEL
-# =========================
-
-@router.message(F.text == "❌ Exit Developer Panel")
+@router.message(F.text == BTN_EXIT_DEVELOPER)
 async def exit_developer(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     await message.answer(
-        "✅ Developer Panel Closed",
-        reply_markup=user_main_menu()
+        "<b>Control center closed.</b>",
+        reply_markup=user_main_menu(),
     )
 
 
-# =========================
-# ADD COUPON
-# =========================
-
-@router.message(F.text == "➕ Add Coupon")
-async def add_coupon_button(
-    message: Message,
-    state: FSMContext
-):
-
+@router.message(F.text == BTN_ADD_COUPON)
+async def add_coupon_button(message: Message, state: FSMContext):
     if str(message.from_user.id) != str(ADMIN_ID):
-        await message.answer("❌ Developer Only")
+        await message.answer("<b>Developer only.</b>")
         return
 
     await message.answer(
-        "📥 Send bulk coupons\n\n"
-        "Format:\n"
-        "Coupon Name|Coupon Code|Discount|Minimum Order|Price\n\n"
-        "Example:\n"
-        "BigBasket Chocolate & Ice Cream|BB100ICE001|100|100|14"
+        "<b>Inventory Import</b>\n\n"
+        "<blockquote>Upload coupon inventory in bulk. Coupon codes should be "
+        "sent in monospace-friendly pipe format.</blockquote>\n\n"
+        "<b>Format</b>\n"
+        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>\n\n"
+        "<b>Example</b>\n"
+        f"<code>{COUPON_NAME}|BB100ICE001|100|100|14</code>"
     )
 
-    await state.set_state(
-        CouponUpload.waiting_for_bulk_coupons
-    )
+    await state.set_state(CouponUpload.waiting_for_bulk_coupons)
 
 
-# =========================
-# PROCESS COUPONS
-# =========================
-
-@router.message(
-    CouponUpload.waiting_for_bulk_coupons
-)
-async def process_bulk_coupon(
-    message: Message,
-    state: FSMContext
-):
-
+@router.message(CouponUpload.waiting_for_bulk_coupons)
+async def process_bulk_coupon(message: Message, state: FSMContext):
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     lines = message.text.split("\n")
-
     added = 0
     failed = 0
 
     for line in lines:
-
         try:
-
-            (
-                name,
-                code,
-                discount,
-                minimum,
-                price
-            ) = line.split("|")
-
+            name, code, discount, minimum, price = line.split("|")
             success = add_coupon(
                 name.strip(),
                 code.strip(),
                 int(discount),
                 int(minimum),
-                int(price)
+                int(price),
             )
 
             if success:
                 added += 1
             else:
                 failed += 1
-
         except Exception:
             failed += 1
 
     await message.answer(
-        f"✅ Upload Complete\n\n"
-        f"Added: {added}\n"
-        f"Failed: {failed}"
+        "<b>Upload Complete</b>\n\n"
+        f"<blockquote>Added: <b>{added}</b>\n"
+        f"Failed: <b>{failed}</b></blockquote>"
     )
-
     await state.clear()
 
 
-# =========================
-# INVENTORY
-# =========================
-
-@router.message(F.text == "📦 Inventory")
+@router.message(F.text == BTN_INVENTORY)
 async def inventory(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     total = get_total_coupons()
 
     await message.answer(
-        f"📦 Inventory\n\n"
-        f"Total Coupons: {total}"
+        "<b>Inventory</b>\n\n"
+        f"<blockquote>Total Coupons: <b>{total}</b></blockquote>"
     )
 
 
-# =========================
-# STATISTICS
-# =========================
-
-@router.message(F.text == "📊 Statistics")
+@router.message(F.text == BTN_STATISTICS)
 async def statistics(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
@@ -210,96 +160,64 @@ async def statistics(message: Message):
     revenue = get_total_revenue()
 
     await message.answer(
-        f"📊 Statistics\n\n"
-        f"📦 Total Coupons: {total_coupons}\n"
-        f"📋 Total Orders: {total_orders}\n"
-        f"💰 Revenue: ₹{revenue}"
+        "<b>Statistics</b>\n\n"
+        f"<blockquote>Total Coupons: <b>{total_coupons}</b>\n"
+        f"Total Orders: <b>{total_orders}</b>\n"
+        f"Revenue: <b>Rs {revenue}</b></blockquote>"
     )
 
 
-# =========================
-# USERS
-# =========================
-
-@router.message(F.text == "👥 Users")
+@router.message(F.text == BTN_USERS)
 async def users(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    await message.answer(
-        "👥 User Statistics\n\n"
-        "Coming Soon..."
-    )
+    await message.answer("<b>User Statistics</b>\n\n<i>Coming soon.</i>")
 
 
-# =========================
-# PAYMENTS
-# =========================
-
-@router.message(F.text == "💰 Payments")
+@router.message(F.text == BTN_PAYMENTS)
 async def payments(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     revenue = get_total_revenue()
 
     await message.answer(
-        f"💰 Payment Dashboard\n\n"
-        f"✅ Successful: {get_completed_orders()}\n"
-        f"⏳ Pending: {get_pending_orders()}\n"
-        f"❌ Failed: {get_failed_orders()}\n"
-        f"🚫 Cancelled: {get_cancelled_orders()}\n\n"
-        f"💵 Revenue: ₹{revenue}"
+        "<b>Payment Dashboard</b>\n\n"
+        f"<blockquote>Successful: <b>{get_completed_orders()}</b>\n"
+        f"Pending: <b>{get_pending_orders()}</b>\n"
+        f"Failed: <b>{get_failed_orders()}</b>\n"
+        f"Cancelled: <b>{get_cancelled_orders()}</b>\n\n"
+        f"Revenue: <b>Rs {revenue}</b></blockquote>"
     )
 
 
-# =========================
-# ORDERS
-# =========================
-
-@router.message(F.text == "📋 Orders")
+@router.message(F.text == BTN_ORDERS)
 async def orders(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     await message.answer(
-        f"📋 Orders Dashboard\n\n"
-        f"Total Orders: {get_total_orders()}\n"
-        f"Pending: {get_pending_orders()}\n"
-        f"Completed: {get_completed_orders()}\n"
-        f"Failed: {get_failed_orders()}\n"
-        f"Cancelled: {get_cancelled_orders()}"
+        "<b>Orders Dashboard</b>\n\n"
+        f"<blockquote>Total Orders: <b>{get_total_orders()}</b>\n"
+        f"Pending: <b>{get_pending_orders()}</b>\n"
+        f"Completed: <b>{get_completed_orders()}</b>\n"
+        f"Failed: <b>{get_failed_orders()}</b>\n"
+        f"Cancelled: <b>{get_cancelled_orders()}</b></blockquote>"
     )
 
 
-# =========================
-# BROADCAST
-# =========================
-
-@router.message(F.text == "📢 Broadcast")
+@router.message(F.text == BTN_BROADCAST)
 async def broadcast(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    await message.answer(
-        "📢 Broadcast System\n\nComing Soon..."
-    )
+    await message.answer("<b>Broadcast System</b>\n\n<i>Coming soon.</i>")
 
 
-# =========================
-# SETTINGS
-# =========================
-
-@router.message(F.text == "⚙️ Settings")
+@router.message(F.text == BTN_SETTINGS)
 async def settings(message: Message):
-
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    await message.answer(
-        "⚙️ Settings\n\nComing Soon..."
-    )
+    await message.answer("<b>Settings</b>\n\n<i>Coming soon.</i>")

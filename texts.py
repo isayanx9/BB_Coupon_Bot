@@ -1,0 +1,58 @@
+COUPON_NAME = "BigBasket Chocolate & Ice Cream"
+BOT_NAME = "BB Coupon Bot"
+BOT_USERNAME = "FlashXBBbot"
+
+BTN_JOIN_CHANNEL = "Join Channel"
+BTN_JOIN_GROUP = "Join Support Group"
+BTN_VERIFY = "Verify"
+BTN_ACCEPT = "Accept"
+BTN_DECLINE = "Decline"
+
+BTN_DEAL_VAULT = "Deal Vault"
+BTN_ACCESS_LOG = "Access Log"
+BTN_AI_ASSIST = "AI Assist"
+BTN_PROFILE = "Profile"
+BTN_SUPPORT = "Support"
+BTN_CONTROL_CENTER = "Control Center"
+
+BTN_ADD_COUPON = "Add Coupon"
+BTN_INVENTORY = "Inventory"
+BTN_STATISTICS = "Statistics"
+BTN_USERS = "Users"
+BTN_PAYMENTS = "Payments"
+BTN_ORDERS = "Orders"
+BTN_BROADCAST = "Broadcast"
+BTN_SETTINGS = "Settings"
+BTN_MAIN_MENU = "Main Menu"
+BTN_EXIT_DEVELOPER = "Exit Developer Panel"
+
+BTN_BUY_NOW = "Buy Now"
+BTN_PAY_NOW = "Pay Now"
+BTN_CANCEL_ORDER = "Cancel Order"
+
+WELCOME_TEXT = (
+    "<b>Welcome to BB Coupon Bot</b>\n\n"
+    "<blockquote>Fast BigBasket coupon delivery with payment tracking, "
+    "support, and an AI assistant trained on this bot workflow.</blockquote>\n\n"
+    "<b>Before continuing</b>\n"
+    "1. Join our channel\n"
+    "2. Join our support group\n"
+    "3. Press <b>Verify</b>"
+)
+
+TERMS_TEXT = (
+    "<b>FLASHX Terms of Use</b>\n\n"
+    "<blockquote><b>Coupon Purchase Policy</b>\n"
+    "All coupon sales are final. Coupons must be used before expiry.</blockquote>\n\n"
+    "<b>Instant Delivery</b>\n"
+    "<i>Coupons are delivered automatically after payment verification. "
+    "Gateway delays may happen.</i>\n\n"
+    "<b>Security and Fair Usage</b>\n"
+    "Fraudulent activity, chargebacks, or abuse may result in restrictions.\n\n"
+    "<b>Payments</b>\n"
+    "Failed payments do not generate coupons. Contact support if money is "
+    "debited but delivery fails.\n\n"
+    "<b>Support</b>\n"
+    "Report issues within 24 hours and keep your Order ID ready.\n\n"
+    "<b>By clicking ACCEPT, you agree to these terms.</b>"
+)

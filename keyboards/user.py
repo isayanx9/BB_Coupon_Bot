@@ -1,117 +1,103 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import (
     ReplyKeyboardMarkup,
-    KeyboardButton
+    KeyboardButton,
 )
 
+from config import CHANNEL_USERNAME, GROUP_USERNAME
+from texts import (
+    BTN_ACCEPT,
+    BTN_ACCESS_LOG,
+    BTN_AI_ASSIST,
+    BTN_CONTROL_CENTER,
+    BTN_DEAL_VAULT,
+    BTN_DECLINE,
+    BTN_JOIN_CHANNEL,
+    BTN_JOIN_GROUP,
+    BTN_PROFILE,
+    BTN_SUPPORT,
+    BTN_VERIFY,
+)
 
-# =========================
-# JOIN & VERIFY KEYBOARD
-# =========================
 
 def join_keyboard():
     kb = InlineKeyboardBuilder()
 
     kb.button(
-        text="📢 Join Channel",
-        url="https://t.me/FlashXDeal"
+        text=BTN_JOIN_CHANNEL,
+        url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}",
     )
-
     kb.button(
-        text="👥 Join Group",
-        url="https://t.me/FlashXSupports"
+        text=BTN_JOIN_GROUP,
+        url=f"https://t.me/{GROUP_USERNAME.lstrip('@')}",
     )
-
     kb.button(
-        text="✅ Verify",
-        callback_data="verify_user"
+        text=BTN_VERIFY,
+        callback_data="verify_user",
     )
 
     kb.adjust(1)
-
     return kb.as_markup()
 
-
-# =========================
-# TERMS & CONDITIONS
-# =========================
 
 def terms_keyboard():
     kb = InlineKeyboardBuilder()
 
     kb.button(
-        text="✅ Accept",
-        callback_data="accept_terms"
+        text=BTN_ACCEPT,
+        callback_data="accept_terms",
     )
-
     kb.button(
-        text="❌ Decline",
-        callback_data="decline_terms"
+        text=BTN_DECLINE,
+        callback_data="decline_terms",
     )
 
     kb.adjust(2)
-
     return kb.as_markup()
 
 
-# =========================
-# NORMAL USER MENU
-# =========================
-
 def user_main_menu():
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text="🛒 Buy Coupons"),
-                KeyboardButton(text="📦 My Orders")
+                KeyboardButton(text=BTN_DEAL_VAULT),
+                KeyboardButton(text=BTN_ACCESS_LOG),
             ],
             [
-                KeyboardButton(text="👤 Profile"),
-                KeyboardButton(text="🎁 Referral")
+                KeyboardButton(text=BTN_AI_ASSIST),
+                KeyboardButton(text=BTN_PROFILE),
             ],
             [
-                KeyboardButton(text="📞 Support")
-            ]
+                KeyboardButton(text=BTN_SUPPORT),
+            ],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Select an option..."
+        input_field_placeholder="FLASH-X AI",
     )
 
-    return keyboard
-
-
-# =========================
-# ADMIN MAIN MENU
-# =========================
 
 def admin_main_menu():
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text="🛒 Buy Coupons"),
-                KeyboardButton(text="📦 My Orders")
+                KeyboardButton(text=BTN_DEAL_VAULT),
+                KeyboardButton(text=BTN_ACCESS_LOG),
             ],
             [
-                KeyboardButton(text="👤 Profile"),
-                KeyboardButton(text="🎁 Referral")
+                KeyboardButton(text=BTN_AI_ASSIST),
+                KeyboardButton(text=BTN_PROFILE),
             ],
             [
-                KeyboardButton(text="📞 Support")
+                KeyboardButton(text=BTN_SUPPORT),
             ],
             [
-                KeyboardButton(text="🛠 Developer")
-            ]
+                KeyboardButton(text=BTN_CONTROL_CENTER),
+            ],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Developer Mode Enabled"
+        input_field_placeholder="FLASH-X CONTROL CENTER",
     )
 
-    return keyboard
-
-
-# =========================
-# DEFAULT MAIN MENU
-# =========================
 
 def main_menu():
     return user_main_menu()

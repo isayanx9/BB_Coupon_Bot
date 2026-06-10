@@ -1,7 +1,9 @@
 from aiogram.types import (
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
 )
+
+from texts import BTN_BUY_NOW, BTN_CANCEL_ORDER, BTN_PAY_NOW
 
 
 def buy_coupon_keyboard():
@@ -9,8 +11,8 @@ def buy_coupon_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🛒 Buy Now",
-                    callback_data="buy_bb_coupon"
+                    text=BTN_BUY_NOW,
+                    callback_data="buy_bb_coupon",
                 )
             ]
         ]
@@ -22,15 +24,15 @@ def payment_keyboard(order_id):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💳 Pay Now",
-                    callback_data=f"pay_{order_id}"
+                    text=BTN_PAY_NOW,
+                    callback_data=f"pay_{order_id}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="❌ Cancel Order",
-                    callback_data=f"cancel_{order_id}"
+                    text=BTN_CANCEL_ORDER,
+                    callback_data=f"cancel_{order_id}",
                 )
-            ]
+            ],
         ]
     )
