@@ -29,7 +29,7 @@ from database.crud import (
     track_user,
     update_order_status,
 )
-from database.db import engine
+from database.db import initialize_database
 from database.models import Base
 from database.payment import create_cashfree_payment_link
 from handlers.admin import router as admin_router
@@ -64,6 +64,24 @@ from texts import (
 )
 
 dp = Dispatcher()
+
+
+def format_payment_error(data):
+    if not isinstance(data, dict):
+        return escape(str(data))
+
+    message = (
+        data.get("message")
+        or data.get("error")
+        or data.get("hint")
+        or "Payment gateway rejected this order."
+    )
+    code = data.get("code") or data.get("status_code") or "unknown"
+
+    return (
+        f"Code: <code>{escape(str(code))}</code>\n"
+        f"Message: <i>{escape(str(message))}</i>"
+    )
 
 
 async def flash_effect(callback: CallbackQuery, text: str):
@@ -322,7 +340,8 @@ async def pay_order(callback: CallbackQuery):
     if "payment_session_id" not in data:
         await callback.message.answer(
             "💔 <b>Payment Error</b>\n\n"
-            f"<code>{data}</code>"
+            f"<blockquote>{format_payment_error(data)}</blockquote>\n\n"
+            "<i>Admin should check Cashfree credentials, PUBLIC_BASE_URL, and webhook URL.</i>"
         )
         await callback.answer()
         return
@@ -449,7 +468,7 @@ async def ai_assist_answer(message: Message, state: FSMContext):
 
 async def main():
     require_env()
-    Base.metadata.create_all(bind=engine)
+    initialize_database(Base)
 
     bot = Bot(
         token=BOT_TOKEN,

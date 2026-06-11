@@ -22,6 +22,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 CASHFREE_CLIENT_ID = os.getenv("CASHFREE_CLIENT_ID")
 CASHFREE_CLIENT_SECRET = os.getenv("CASHFREE_CLIENT_SECRET")
 CASHFREE_ENV = os.getenv("CASHFREE_ENV", "production")
+CASHFREE_CUSTOMER_PHONE = os.getenv("CASHFREE_CUSTOMER_PHONE", "9999999999")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
@@ -31,7 +32,6 @@ def require_env():
     required_values = {
         "BOT_TOKEN": BOT_TOKEN,
         "ADMIN_ID": ADMIN_ID,
-        "DATABASE_URL": DATABASE_URL,
         "CASHFREE_CLIENT_ID": CASHFREE_CLIENT_ID,
         "CASHFREE_CLIENT_SECRET": CASHFREE_CLIENT_SECRET,
     }

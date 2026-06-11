@@ -1,7 +1,7 @@
 from database.db import SessionLocal
 from database.models import BannedUser, BotSetting, Coupon, Order, User
 
-import random
+import uuid
 
 
 def track_user(telegram_id, username=None):
@@ -399,10 +399,7 @@ def create_order(
 
     try:
 
-        order_id = (
-            "BB" +
-            str(random.randint(100000, 999999))
-        )
+        order_id = "BB" + uuid.uuid4().hex[:12].upper()
 
         order = Order(
             order_id=order_id,

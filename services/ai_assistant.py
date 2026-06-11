@@ -7,111 +7,144 @@ from config import OPENAI_API_KEY, OPENAI_MODEL
 from texts import AI_NAME, COUPON_NAME
 
 
+BOT_KNOWLEDGE = """
+BB Coupon Bot helps users join the required channel/group, accept terms, browse
+Deal Vault coupons, create orders, pay through Cashfree, receive coupon codes
+after payment webhooks, review Access Log orders, contact support, and use
+Cutie AI for help. Admins can open Control Center, upload coupons in bulk,
+review inventory, broadcast messages, ban/unban users, change prices, delete
+unsold coupon stock, and edit settings like maintenance_mode.
+"""
+
 SYSTEM_PROMPT = (
-    f"You are {AI_NAME}, BB Coupon Bot's emotional AI assistant. You are warm, "
-    "sweet, premium, and concise. You help users with coupon buying, order "
-    "status, payment delay guidance, support steps, bug reports, and admin "
-    "workflow. Detect the user's emotion and respond with empathy. Do not "
-    "claim you can directly edit production or guarantee bug fixes unless an "
-    "admin deploys changes."
+    f"You are {AI_NAME}, BB Coupon Bot's emotional AI assistant. Answer every "
+    "question that is about this bot, how to use it, payments, orders, coupons, "
+    "admin tools, settings, bugs, database issues, Railway deployment, or "
+    "support. Be warm, clear, and practical. If the user asks unrelated general "
+    "knowledge, politely bring them back to BB Coupon Bot. Never claim you can "
+    "directly edit production or guarantee payment success. Bot knowledge: "
+    f"{BOT_KNOWLEDGE}"
 )
 
 EMOTION_KEYWORDS = {
-    "worried": ["stuck", "help", "not delivered", "missing", "waiting", "delay"],
-    "upset": ["angry", "bad", "fraud", "scam", "hate", "wrong"],
-    "excited": ["wow", "nice", "great", "love", "awesome", "fast"],
-    "confused": ["how", "where", "what", "why", "confused", "don't know"],
+    "worried": ["stuck", "help", "not delivered", "missing", "waiting", "delay", "crash"],
+    "upset": ["angry", "bad", "fraud", "scam", "hate", "wrong", "failed"],
+    "excited": ["wow", "nice", "great", "love", "awesome", "fast", "premium"],
+    "confused": ["how", "where", "what", "why", "confused", "don't know", "use"],
 }
 
 INTENT_KEYWORDS = {
-    "payment": ["payment", "paid", "cashfree", "money", "debited", "upi"],
-    "coupon": ["coupon", "code", "buy", "stock", "deal", "vault"],
-    "bug": ["bug", "error", "fix", "issue", "broken", "crash"],
-    "admin": ["admin", "upload", "inventory", "panel", "developer"],
-    "order": ["order", "status", "delivery", "delivered", "pending"],
+    "payment": ["payment", "paid", "cashfree", "money", "debited", "upi", "checkout"],
+    "coupon": ["coupon", "code", "buy", "stock", "deal", "vault", "inventory"],
+    "database": ["database", "postgres", "sql", "railway", "db", "crash"],
+    "admin": ["admin", "upload", "panel", "developer", "broadcast", "ban", "setting"],
+    "order": ["order", "status", "delivery", "delivered", "pending", "access log"],
+    "support": ["support", "contact", "issue", "problem", "bug", "fix"],
+    "howto": ["how", "use", "start", "join", "verify", "terms", "menu"],
 }
 
 
 def detect_emotion(question):
     normalized = question.lower()
-
     scores = {
         emotion: sum(word in normalized for word in words)
         for emotion, words in EMOTION_KEYWORDS.items()
     }
-
     emotion = max(scores, key=scores.get)
     return emotion if scores[emotion] else "calm"
 
 
 def detect_intent(question):
     normalized = question.lower()
-
     scores = {
         intent: sum(word in normalized for word in words)
         for intent, words in INTENT_KEYWORDS.items()
     }
-
     intent = max(scores, key=scores.get)
     return intent if scores[intent] else "general"
 
 
 def emotion_prefix(emotion):
     prefixes = {
-        "worried": "💖 I feel that worry. Cutie is here with you.",
-        "upset": "🫶 I get why that feels frustrating. Let us fix the path.",
+        "worried": "💖 I feel the stress. Cutie will walk you through it.",
+        "upset": "🫶 That sounds frustrating. Let us make the next step clear.",
         "excited": "✨ Love that energy. Cutie is ready.",
-        "confused": "🌸 No stress. I will make it simple.",
+        "confused": "🌸 No stress. I will explain it simply.",
         "calm": "💖 Cutie is online and listening.",
     }
     return prefixes.get(emotion, prefixes["calm"])
 
 
-@lru_cache(maxsize=256)
+def answer_body(intent):
+    if intent == "payment":
+        return (
+            "For payment: open <b>Deal Vault</b>, select a coupon, tap "
+            "<b>Pay Now</b>, then finish Cashfree checkout. If money is debited "
+            "but delivery does not happen, send support your Order ID and "
+            "payment screenshot. Admin should also confirm <code>PUBLIC_BASE_URL</code>, "
+            "<code>CASHFREE_CLIENT_ID</code>, <code>CASHFREE_CLIENT_SECRET</code>, "
+            "and Cashfree webhook URL."
+        )
+
+    if intent == "coupon":
+        return (
+            f"Coupons are managed by admin. Users buy from <b>Deal Vault</b>. "
+            f"Admin uploads rows like <code>{COUPON_NAME}|BB100ICE001|100|100|14</code>. "
+            "The code is delivered only after successful payment webhook."
+        )
+
+    if intent == "database":
+        return (
+            "If Postgres was deleted, add a new Railway Postgres service and "
+            "connect its <code>DATABASE_URL</code>. The bot now retries the DB "
+            "and can fall back to local SQLite so it does not crash, but Railway "
+            "Postgres is still recommended for real orders."
+        )
+
+    if intent == "admin":
+        return (
+            "Admin tools are hidden from users. Use <b>Control Center</b> for "
+            "bulk coupons, inventory, broadcast, settings, users, bans, price "
+            "changes, and deleting unsold coupon groups."
+        )
+
+    if intent == "order":
+        return (
+            "Use <b>Access Log</b> to see orders. Pending means payment is not "
+            "confirmed yet. SUCCESS plus NOT_DELIVERED means support should "
+            "check coupon stock and webhook delivery."
+        )
+
+    if intent == "support":
+        return (
+            "For support, send the Order ID, payment screenshot, the button you "
+            "pressed, and the exact error. Cutie can help format the report so "
+            "admin can fix it faster."
+        )
+
+    if intent == "howto":
+        return (
+            "Start with /start, join the channel and support group, press "
+            "<b>Verify</b>, accept terms, then use <b>Deal Vault</b>, "
+            "<b>Access Log</b>, <b>Support</b>, or <b>Cutie AI</b>."
+        )
+
+    return (
+        "I can answer anything about BB Coupon Bot: how to use it, coupons, "
+        "orders, payments, support, admin tools, settings, bans, database, and "
+        "Railway deployment. Ask me in normal language."
+    )
+
+
+@lru_cache(maxsize=512)
 def local_ai_answer(question):
     emotion = detect_emotion(question)
     intent = detect_intent(question)
     prefix = emotion_prefix(emotion)
 
-    if intent == "payment":
-        body = (
-            "If payment succeeded but the coupon was not delivered, send your "
-            "Order ID and payment screenshot to support. Delivery waits for "
-            "Cashfree webhook confirmation, so gateway delay can happen."
-        )
-    elif intent == "coupon":
-        body = (
-            f"The current premium coupon is <code>{COUPON_NAME}</code>. Open "
-            "<b>Deal Vault</b>, tap <b>Buy Now</b>, then complete the secure "
-            "payment checkout."
-        )
-    elif intent == "bug":
-        body = (
-            "Send the exact error, button name, Order ID if any, and what you "
-            "expected. I can guide the report so the admin can patch and "
-            "redeploy the bot faster."
-        )
-    elif intent == "admin":
-        body = (
-            "Open <b>Control Center</b> and upload inventory like this:\n"
-            f"<code>{COUPON_NAME}|BB100ICE001|100|100|14</code>"
-        )
-    elif intent == "order":
-        body = (
-            "Open <b>Access Log</b> to see your latest orders. If payment is "
-            "<i>SUCCESS</i> but delivery is not complete, contact support with "
-            "the Order ID."
-        )
-    else:
-        body = (
-            "Ask me about payments, orders, coupon stock, delivery, bugs, or "
-            "admin uploads. I use a small local machine-learning style keyword "
-            "model here, and deep AI answers when OpenAI is configured."
-        )
-
     return (
         f"<b>{AI_NAME} AI</b> 💖\n"
-        f"<blockquote>{prefix}\n\n{body}</blockquote>"
+        f"<blockquote>{prefix}\n\n{answer_body(intent)}</blockquote>"
     )
 
 

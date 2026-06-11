@@ -3,7 +3,9 @@ import requests
 from config import (
     CASHFREE_CLIENT_ID,
     CASHFREE_CLIENT_SECRET,
+    CASHFREE_CUSTOMER_PHONE,
     CASHFREE_ENV,
+    PUBLIC_BASE_URL,
 )
 
 
@@ -13,6 +15,12 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         if CASHFREE_ENV == "sandbox"
         else "https://api.cashfree.com/pg/orders"
     )
+
+    if not CASHFREE_CLIENT_ID or not CASHFREE_CLIENT_SECRET:
+        return {
+            "error": "Cashfree credentials are missing",
+            "hint": "Set CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET in Railway Variables.",
+        }
 
     headers = {
         "accept": "application/json",
@@ -24,26 +32,43 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
 
     payload = {
         "order_id": order_id,
-        "order_amount": amount,
+        "order_amount": float(amount),
         "order_currency": "INR",
         "customer_details": {
             "customer_id": str(customer_id),
-            "customer_phone": "9999999999",
+            "customer_name": f"Telegram {customer_id}",
+            "customer_phone": CASHFREE_CUSTOMER_PHONE,
+        },
+        "order_meta": {
+            "return_url": f"{PUBLIC_BASE_URL}/pay/{order_id}?status={{order_status}}",
+            "notify_url": f"{PUBLIC_BASE_URL}/webhook/cashfree",
         },
     }
 
-    response = requests.post(
-        base_url,
-        json=payload,
-        headers=headers,
-        timeout=20,
-    )
+    try:
+        response = requests.post(
+            base_url,
+            json=payload,
+            headers=headers,
+            timeout=20,
+        )
+    except requests.RequestException as error:
+        return {
+            "error": "Could not connect to Cashfree",
+            "hint": str(error),
+        }
 
     try:
-        return response.json()
+        data = response.json()
     except ValueError:
         return {
             "error": "Invalid response from Cashfree",
             "status_code": response.status_code,
             "body": response.text,
         }
+
+    if response.status_code >= 400:
+        data.setdefault("error", "Cashfree rejected the order")
+        data.setdefault("status_code", response.status_code)
+
+    return data

@@ -4,14 +4,22 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from sqlalchemy import text
 
-from config import BOT_TOKEN, CASHFREE_ENV
+from config import (
+    BOT_TOKEN,
+    CASHFREE_CLIENT_ID,
+    CASHFREE_CLIENT_SECRET,
+    CASHFREE_ENV,
+    PUBLIC_BASE_URL,
+)
 from database.crud import (
     get_order_by_id,
     get_payment_session,
     update_delivery_status,
     update_order_status,
 )
+import database.db as database_db
 from services.coupon_service import deliver_coupon
 
 app = FastAPI()
@@ -23,6 +31,36 @@ async def home():
         "status": "running",
         "service": "BB Coupon Bot",
         "ai_assist": "Cutie enabled",
+        "database": database_db.active_database_url,
+        "public_base_url": PUBLIC_BASE_URL,
+        "cashfree_env": CASHFREE_ENV,
+    }
+
+
+@app.get("/health")
+async def health():
+    db = database_db.SessionLocal()
+
+    try:
+        db.execute(text("SELECT 1"))
+        database_ok = True
+        database_error = None
+    except Exception as error:
+        database_ok = False
+        database_error = str(error)
+    finally:
+        db.close()
+
+    cashfree_ok = bool(CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET)
+
+    return {
+        "ok": database_ok and cashfree_ok,
+        "database_ok": database_ok,
+        "database_url": database_db.active_database_url,
+        "database_error": database_error,
+        "cashfree_ok": cashfree_ok,
+        "cashfree_env": CASHFREE_ENV,
+        "public_base_url": PUBLIC_BASE_URL,
     }
 
 
