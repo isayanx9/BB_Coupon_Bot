@@ -16,6 +16,7 @@ const bot = createBot();
 const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));
+app.use("/webhook/cashfree", express.raw({ type: "*/*", limit: "1mb" }));
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
@@ -99,13 +100,32 @@ app.get("/pay/:orderId", async (req, res) => {
   `);
 });
 
-app.get("/webhook/cashfree", (_req, res) => {
-  res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
-});
+function webhookBody(req) {
+  if (!Buffer.isBuffer(req.body)) return req.body || {};
+  if (!req.body.length) return {};
 
-app.post("/webhook/cashfree", async (req, res) => {
-  const orderId = req.body?.data?.order?.order_id || req.body?.order_id;
-  const status = req.body?.data?.payment?.payment_status || req.body?.order_status;
+  try {
+    return JSON.parse(req.body.toString("utf8"));
+  } catch (_error) {
+    return {};
+  }
+}
+
+app.all("/webhook/cashfree", async (req, res) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    res.set("Allow", "GET,HEAD,OPTIONS,POST");
+    res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const body = webhookBody(req);
+  const orderId = body?.data?.order?.order_id || body?.order_id;
+  const status = body?.data?.payment?.payment_status || body?.order_status;
 
   if (!orderId) {
     res.json({ ok: true, provider: "cashfree", received: true });
@@ -117,9 +137,9 @@ app.post("/webhook/cashfree", async (req, res) => {
     return;
   }
 
-  await logPayment(orderId, status || "WEBHOOK", req.body);
+  await logPayment(orderId, status || "WEBHOOK", body);
 
-  if (orderId && ["SUCCESS", "PAID", "ACTIVE"].includes(String(status).toUpperCase())) {
+  if (["SUCCESS", "PAID", "ACTIVE"].includes(String(status).toUpperCase())) {
     const order = await completeOrder(orderId);
     await bot.sendMessage(
       order.user_id,
@@ -128,7 +148,7 @@ app.post("/webhook/cashfree", async (req, res) => {
     );
   }
 
-  res.json({ ok: true });
+  res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
 });
 
 app.listen(config.port, () => {
