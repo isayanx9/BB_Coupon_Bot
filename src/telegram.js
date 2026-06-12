@@ -34,6 +34,15 @@ export class TelegramClient {
     });
   }
 
+  async editMessageText(chatId, messageId, text, options = {}) {
+    return this.request("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      ...options,
+    });
+  }
+
   async answerCallbackQuery(callbackQueryId, options = {}) {
     return this.request("answerCallbackQuery", {
       callback_query_id: callbackQueryId,

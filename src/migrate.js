@@ -130,6 +130,14 @@ export async function migrate() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS activity_feed (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT,
+      event TEXT NOT NULL,
+      details JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS rate_limits (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT,
@@ -142,6 +150,7 @@ export async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
     CREATE INDEX IF NOT EXISTS idx_coupons_active ON coupons(active, expires_at);
     CREATE INDEX IF NOT EXISTS idx_wallet_user ON wallet_transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_feed(created_at DESC);
   `);
 
   logger.info("Database migration complete");

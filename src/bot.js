@@ -10,21 +10,36 @@ import {
   completeOrder,
   createOrder,
   createReferral,
+  createRefundRequest,
   creditWallet,
+  deactivateCoupon,
   getOrder,
   getUser,
   leaderboard,
   listCoupons,
+  liveActivity,
   logPayment,
   markChannelsJoined,
+  referralHistory,
   rewardReferralAfterJoin,
   setBan,
   stats,
+  updateCoupon,
   upsertUser,
   userOrders,
   walletBalance,
 } from "./repositories.js";
-import { couponCard, couponKeyboard, escapeHtml, menu, paymentKeyboard } from "./ui.js";
+import {
+  bootFrames,
+  couponCard,
+  couponKeyboard,
+  escapeHtml,
+  menu,
+  paymentFrames,
+  paymentKeyboard,
+  rewardFrames,
+  streakBar,
+} from "./ui.js";
 import { TelegramClient } from "./telegram.js";
 
 const sessions = new Map();
@@ -45,8 +60,8 @@ async function handleMessage(bot, message) {
     if (rateLimited(message.from.id)) return;
 
     await upsertUser(message.from);
-
     const user = await getUser(message.from.id);
+
     if (user?.banned) {
       await bot.sendMessage(message.chat.id, "🚫 Your account is restricted.", { parse_mode: "HTML" });
       return;
@@ -62,16 +77,19 @@ async function handleMessage(bot, message) {
 
     if (text.startsWith("/start")) return start(bot, message);
     if (text === "/admin" || text === "🛠 Admin") return admin(bot, message);
+    if (text === "/profile") return profile(bot, message);
     if (text === "⚡ Flash Deals") return sendCoupons(bot, message, "active");
     if (text === "🔥 Hot Coupons") return sendCoupons(bot, message, "hot");
-    if (text === "📦 My Orders") return myOrders(bot, message);
+    if (text === "📦 Orders") return myOrders(bot, message);
     if (text === "💰 Wallet") return wallet(bot, message);
     if (text === "👥 Refer & Earn") return refer(bot, message);
     if (text === "🎁 Rewards") return rewards(bot, message);
-    if (text === "🤖 Support AI") return startAi(bot, message);
-    if (text === "📢 Updates") return bot.sendMessage(message.chat.id, "📢 Updates will arrive here when new stock drops.", menu.main);
+    if (text === "🤖 FlashX AI") return startAi(bot, message);
+    if (text === "📢 Updates") return updates(bot, message);
     if (text === "📊 Dashboard") return dashboard(bot, message);
     if (text === "➕ Add Coupon") return beginSession(bot, message, "addCoupon");
+    if (text === "✏️ Edit Coupon") return beginSession(bot, message, "editCoupon");
+    if (text === "🗑 Delete Coupon") return beginSession(bot, message, "deleteCoupon");
     if (text === "📣 Broadcast") return beginSession(bot, message, "broadcast");
     if (text === "💰 Credit Wallet") return beginSession(bot, message, "creditWallet");
     if (text === "🚫 Ban User") return beginSession(bot, message, "banUser");
@@ -91,12 +109,31 @@ async function start(bot, message) {
   const parts = message.text.split(" ");
   if (parts[1] && /^\d+$/.test(parts[1])) await createReferral(Number(parts[1]), message.from.id);
 
-  await verifyRequiredChannels(bot, message.from.id);
+  const joined = await verifyRequiredChannels(bot, message.from.id);
+  await bootAnimation(bot, message.chat.id);
+
+  if (!joined) {
+    await bot.sendMessage(
+      message.chat.id,
+      "⚡ <b>FlashXBBbot</b>\n\nJoin the required channels first, then press /start again.",
+      { parse_mode: "HTML" },
+    );
+    return;
+  }
+
   await bot.sendMessage(
     message.chat.id,
-    "⚡ <b>FlashXBBbot</b>\n\n💎 Verified BigBasket coupon drops, instant delivery, wallet credits, referrals and AI support.",
+    "⚡ <b>FlashXBBbot</b>\n\n<b>BLACK / DARK GRAY / ELECTRIC YELLOW</b>\n\n💎 Verified BigBasket coupon drops, instant delivery, wallet credits, referrals and FlashX AI support.",
     menu.main,
   );
+}
+
+async function bootAnimation(bot, chatId) {
+  const message = await bot.sendMessage(chatId, bootFrames[0]);
+  for (const frame of bootFrames.slice(1)) {
+    await delay(350);
+    await bot.editMessageText(chatId, message.message_id, frame).catch(() => {});
+  }
 }
 
 async function verifyRequiredChannels(bot, userId) {
@@ -165,6 +202,7 @@ async function handleCallback(bot, callback) {
         const completed = await completeOrder(order.order_id);
         await bot.sendMessage(chatId, deliveryText(completed), { parse_mode: "HTML" });
       } else {
+        await paymentAnimation(bot, chatId);
         const cashfree = await createCashfreeOrder(order, callback.from.id);
         await import("./repositories.js").then(({ attachPaymentSession }) => attachPaymentSession(order.order_id, cashfree.payment_session_id));
         await bot.sendMessage(
@@ -192,6 +230,12 @@ async function handleCallback(bot, callback) {
       const order = await getOrder(data.split(":")[1]);
       if (order) await bot.sendMessage(chatId, `<code>${escapeHtml(order.invoice_text)}</code>`, { parse_mode: "HTML" });
     }
+
+    if (data.startsWith("refund:")) {
+      const orderId = data.split(":")[1];
+      await createRefundRequest(orderId, callback.from.id, "User requested refund from invoice controls");
+      await bot.sendMessage(chatId, `🧾 Refund request opened for <code>${orderId}</code>.`, { parse_mode: "HTML" });
+    }
   } catch (error) {
     logger.error({ error }, "Callback failed");
     await bot.sendMessage(chatId, "That action could not be completed. Please try again or contact support.");
@@ -200,14 +244,25 @@ async function handleCallback(bot, callback) {
   }
 }
 
+async function paymentAnimation(bot, chatId) {
+  const message = await bot.sendMessage(chatId, paymentFrames[0]);
+  for (const frame of paymentFrames.slice(1)) {
+    await delay(400);
+    await bot.editMessageText(chatId, message.message_id, frame).catch(() => {});
+  }
+}
+
 function deliveryText(order) {
   return [
-    "🎉 <b>ORDER COMPLETED</b>",
+    "✅ <b>Payment Complete</b>",
+    "",
+    "██████████ 100%",
     "",
     `Order: <code>${order.order_id}</code>`,
     `Coupon code: <code>${escapeHtml(order.coupon_code)}</code>`,
     "",
-    "💎 VERIFIED OFFER delivered instantly.",
+    "⚡ Instant Delivery",
+    "💎 VERIFIED OFFER",
   ].join("\n");
 }
 
@@ -228,23 +283,44 @@ async function wallet(bot, message) {
 
 async function refer(bot, message) {
   const rows = await leaderboard();
+  const history = await referralHistory(message.from.id);
   const link = `https://t.me/${(await bot.getMe()).username}?start=${message.from.id}`;
   const top = rows.map((row, index) => `${index + 1}. <code>${row.referrer_id}</code> - ${row.referrals}`).join("\n") || "No referrals yet.";
-  await bot.sendMessage(message.chat.id, `👥 <b>Refer & Earn</b>\n\nEarn 1 credit after each verified referral.\n\n<code>${link}</code>\n\n<b>Leaderboard</b>\n${top}`, { parse_mode: "HTML" });
+  const recent = history.map((row) => `<code>${row.referred_id}</code> - ${row.reward_credited ? "Rewarded" : "Pending"}`).join("\n") || "No referral history yet.";
+
+  await bot.sendMessage(
+    message.chat.id,
+    `👥 <b>Refer & Earn</b>\n\n1 successful referral = <b>1 credit</b> = <b>₹1</b>\nReferral counts after required channel join.\n\n<code>${link}</code>\n\n<b>Leaderboard</b>\n${top}\n\n<b>Your History</b>\n${recent}`,
+    { parse_mode: "HTML" },
+  );
 }
 
 async function rewards(bot, message) {
   const result = await claimDailyReward(message.from.id);
   if (!result.claimed) {
-    await bot.sendMessage(message.chat.id, `🎁 Daily reward already claimed. Current streak: ${result.streak}`);
+    await bot.sendMessage(message.chat.id, `🎁 Daily reward already claimed.\n\n⚡ DAILY STREAK\nDay ${result.streak} / 30\n\n${streakBar(result.streak)}`);
     return;
   }
-  await bot.sendMessage(message.chat.id, `🎁 Claimed ₹${result.reward}. Streak: ${result.streak}`);
+
+  await rewardAnimation(bot, message.chat.id);
+  await bot.sendMessage(
+    message.chat.id,
+    `⚡ <b>DAILY STREAK</b>\nDay ${result.streak} / 30\n\n${streakBar(result.streak)}\n\n💰 Reward Unlocked\n+₹${result.reward} Credits${result.freeCoupon ? "\n🎟 Day 30 Free Coupon Reward unlocked" : ""}`,
+    { parse_mode: "HTML" },
+  );
+}
+
+async function rewardAnimation(bot, chatId) {
+  const message = await bot.sendMessage(chatId, rewardFrames[0]);
+  for (const frame of rewardFrames.slice(1)) {
+    await delay(400);
+    await bot.editMessageText(chatId, message.message_id, frame).catch(() => {});
+  }
 }
 
 async function startAi(bot, message) {
   sessions.set(message.from.id, { type: "ai" });
-  await bot.sendMessage(message.chat.id, "🤖 Ask me about coupons, payments, referrals, wallet, orders or bot usage.");
+  await bot.sendMessage(message.chat.id, "🤖 <b>FlashX AI</b>\n\nAsk me about coupons, payments, referrals, rewards, wallet, orders or bot usage.", { parse_mode: "HTML" });
 }
 
 async function admin(bot, message) {
@@ -258,11 +334,23 @@ async function dashboard(bot, message) {
   await bot.sendMessage(message.chat.id, `📊 <b>Admin Dashboard</b>\n\nUsers: ${data.users}\nOrders: ${data.orders}\nCompleted: ${data.completed_orders}\nRevenue: ₹${data.revenue}\nActive coupons: ${data.active_coupons}\nReferral conversions: ${data.referral_conversions}`, { parse_mode: "HTML" });
 }
 
+async function profile(bot, message) {
+  const user = await getUser(message.from.id);
+  const balance = await walletBalance(message.from.id);
+  await bot.sendMessage(
+    message.chat.id,
+    `⚡ <b>Profile</b>\n\nID: <code>${message.from.id}</code>\nUsername: <b>${escapeHtml(message.from.username || "none")}</b>\nWallet: <b>₹${balance}</b>\nStreak: <b>${user?.daily_streak || 0}</b>`,
+    { parse_mode: "HTML" },
+  );
+}
+
 async function beginSession(bot, message, type) {
   if (String(message.from.id) !== config.adminUserId) return bot.sendMessage(message.chat.id, "Admin only.");
   sessions.set(message.from.id, { type, step: 0, data: {} });
   const prompts = {
     addCoupon: "Send coupon as: category | title | code | price | stock | expiry ISO or blank | image url or blank | description",
+    editCoupon: "Send: coupon_id | title | price | stock | active true/false",
+    deleteCoupon: "Send coupon_id to deactivate.",
     broadcast: "Send broadcast message.",
     creditWallet: "Send: user_id | amount | reason",
     banUser: "Send user_id to ban.",
@@ -298,6 +386,24 @@ async function handleSession(bot, message, session) {
     return bot.sendMessage(message.chat.id, `Coupon added: ${coupon.title}`);
   }
 
+  if (session.type === "editCoupon") {
+    const [id, title, price, stock, active] = text.split("|").map((part) => part.trim());
+    const coupon = await updateCoupon(Number(id), {
+      title,
+      price: price ? Number(price) : null,
+      stock: stock ? Number(stock) : null,
+      active: active ? active.toLowerCase() === "true" : null,
+    });
+    await audit(message.from.id, "EDIT_COUPON", { id });
+    return bot.sendMessage(message.chat.id, coupon ? `Coupon updated: ${coupon.title}` : "Coupon not found.");
+  }
+
+  if (session.type === "deleteCoupon") {
+    const coupon = await deactivateCoupon(Number(text));
+    await audit(message.from.id, "DELETE_COUPON", { id: text });
+    return bot.sendMessage(message.chat.id, coupon ? "Coupon deactivated." : "Coupon not found.");
+  }
+
   if (session.type === "broadcast") {
     const users = await import("./db.js").then(({ query }) => query("SELECT telegram_id FROM users WHERE banned = FALSE"));
     let sent = 0;
@@ -327,6 +433,19 @@ async function handleSession(bot, message, session) {
   }
 }
 
+async function updates(bot, message) {
+  const rows = await liveActivity();
+  const labels = {
+    COUPON_PURCHASED: "🔥 Coupon Purchased",
+    PAYMENT_VERIFIED: "⚡ Payment Verified",
+    REWARD_CLAIMED: "🎁 Reward Claimed",
+    REFERRAL_REWARDED: "💰 Wallet Credited",
+    REFUND_REQUESTED: "🧾 Refund Requested",
+  };
+  const feed = rows.map((row) => labels[row.event] || `⚡ ${row.event}`).join("\n") || "No live activity yet.";
+  await bot.sendMessage(message.chat.id, `📢 <b>Live Activity Feed</b>\n\n${feed}`, { parse_mode: "HTML" });
+}
+
 async function backup(bot, message) {
   if (String(message.from.id) !== config.adminUserId) return;
   await backupSnapshot();
@@ -344,4 +463,8 @@ function rateLimited(userId) {
   state.count += 1;
   inMemoryRateLimit.set(userId, state);
   return state.count > 12;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

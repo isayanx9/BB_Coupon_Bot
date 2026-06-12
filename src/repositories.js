@@ -54,6 +54,10 @@ export async function rewardReferralAfterJoin(referredId) {
        VALUES ($1, 1, 'REFERRAL', 'Successful referral reward')`,
       [referral.rows[0].referrer_id],
     );
+    await client.query(
+      "INSERT INTO activity_feed (user_id, event, details) VALUES ($1, 'REFERRAL_REWARDED', $2)",
+      [referral.rows[0].referrer_id, { referredId, credits: 1 }],
+    );
     return true;
   });
 }
@@ -102,6 +106,25 @@ export async function addCoupon(data) {
     ],
   );
   return result.rows[0];
+}
+
+export async function updateCoupon(id, data) {
+  const result = await query(
+    `UPDATE coupons
+     SET title = COALESCE($2, title),
+         price = COALESCE($3, price),
+         stock = COALESCE($4, stock),
+         active = COALESCE($5, active)
+     WHERE id = $1
+     RETURNING *`,
+    [id, data.title || null, data.price ?? null, data.stock ?? null, data.active ?? null],
+  );
+  return result.rows[0] || null;
+}
+
+export async function deactivateCoupon(id) {
+  const result = await query("UPDATE coupons SET active = FALSE WHERE id = $1 RETURNING *", [id]);
+  return result.rows[0] || null;
 }
 
 export async function listCoupons({ search = "", mode = "active", limit = 10 } = {}) {
@@ -230,6 +253,10 @@ export async function completeOrder(orderId) {
       "INSERT INTO payment_logs (order_id, status, payload) VALUES ($1, 'COMPLETED', $2)",
       [orderId, { source: "completeOrder" }],
     );
+    await client.query(
+      "INSERT INTO activity_feed (user_id, event, details) VALUES ($1, 'COUPON_PURCHASED', $2)",
+      [order.user_id, { orderId, couponCode: order.code }],
+    );
     return completed.rows[0];
   });
 }
@@ -259,13 +286,18 @@ export async function claimDailyReward(userId) {
     const userResult = await client.query("SELECT * FROM users WHERE telegram_id = $1 FOR UPDATE", [userId]);
     const user = userResult.rows[0];
     const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
     if (user?.last_daily_claim && user.last_daily_claim.toISOString().slice(0, 10) === today) {
-      return { claimed: false, streak: user.daily_streak };
+      return { claimed: false, streak: user.daily_streak, reward: 0, freeCoupon: false };
     }
 
-    const streak = (user?.daily_streak || 0) + 1;
-    const reward = streak % 7 === 0 ? 7 : 1;
+    const lastClaim = user?.last_daily_claim ? user.last_daily_claim.toISOString().slice(0, 10) : null;
+    const streak = lastClaim === yesterday ? (user?.daily_streak || 0) + 1 : 1;
+    const milestoneRewards = { 7: 5, 14: 10, 21: 20 };
+    const reward = milestoneRewards[streak] || 1;
+    const freeCoupon = streak === 30;
+
     await client.query(
       "UPDATE users SET daily_streak = $2, last_daily_claim = $3 WHERE telegram_id = $1",
       [userId, streak, today],
@@ -274,7 +306,11 @@ export async function claimDailyReward(userId) {
       "INSERT INTO wallet_transactions (user_id, amount, type, reason) VALUES ($1, $2, 'DAILY', $3)",
       [userId, reward, `Daily reward streak ${streak}`],
     );
-    return { claimed: true, streak, reward };
+    await client.query(
+      "INSERT INTO activity_feed (user_id, event, details) VALUES ($1, 'REWARD_CLAIMED', $2)",
+      [userId, { streak, reward, freeCoupon }],
+    );
+    return { claimed: true, streak, reward, freeCoupon };
   });
 }
 
@@ -288,6 +324,48 @@ export async function leaderboard() {
      LIMIT 10`,
   );
   return result.rows;
+}
+
+export async function referralHistory(userId, limit = 10) {
+  const result = await query(
+    `SELECT referred_id, reward_credited, created_at
+     FROM referrals
+     WHERE referrer_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+  return result.rows;
+}
+
+export async function liveActivity(limit = 8) {
+  const result = await query(
+    `SELECT event, details, created_at
+     FROM activity_feed
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit],
+  );
+  return result.rows;
+}
+
+export async function logActivity(userId, event, details = {}) {
+  await query("INSERT INTO activity_feed (user_id, event, details) VALUES ($1, $2, $3)", [
+    userId,
+    event,
+    details,
+  ]);
+}
+
+export async function createRefundRequest(orderId, userId, reason) {
+  const result = await query(
+    `INSERT INTO refund_requests (order_id, user_id, reason)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
+    [orderId, userId, reason],
+  );
+  await logActivity(userId, "REFUND_REQUESTED", { orderId });
+  return result.rows[0];
 }
 
 export async function saveSupportConversation(userId, message, answer) {
