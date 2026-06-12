@@ -10,26 +10,52 @@ import { completeOrder, getOrder, logPayment, stats } from "./repositories.js";
 import { validateCashfreeWebhook } from "./services/cashfree.js";
 
 assertConfig();
-await migrate();
-
-const bot = createBot();
 const app = express();
+let bot = null;
+let bootstrapReady = false;
+let bootstrapRunning = false;
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use("/webhook/cashfree", express.raw({ type: "*/*", limit: "1mb" }));
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+async function bootstrap() {
+  if (bootstrapRunning || bootstrapReady) return;
+  bootstrapRunning = true;
+
+  try {
+    await migrate();
+    bot = createBot();
+    bootstrapReady = true;
+    logger.info("FlashXBBbot migration and Telegram polling started");
+  } catch (error) {
+    logger.error({ error }, "FlashXBBbot bootstrap failed; retrying shortly");
+    setTimeout(bootstrap, 15000);
+  } finally {
+    bootstrapRunning = false;
+  }
+}
+
 app.get("/", (_req, res) => {
   res.json({ ok: true, service: "FlashXBBbot", theme: "black-yellow-cyber", mode: process.env.NODE_ENV || "development" });
 });
 
-app.get("/health", async (_req, res) => {
-  await pool.query("SELECT 1");
-  res.json({ ok: true, database: true });
-});
+app.get("/health", asyncRoute(async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true, app: true, database: true, bot: Boolean(bot), ready: bootstrapReady });
+  } catch (error) {
+    logger.error({ error }, "Health database check failed");
+    res.status(503).json({ ok: false, app: true, database: false, bot: Boolean(bot), ready: bootstrapReady });
+  }
+}));
 
-app.get("/admin", async (req, res) => {
+app.get("/admin", asyncRoute(async (req, res) => {
   if (!config.adminWebToken || req.query.token !== config.adminWebToken) {
     res.status(403).send("Admin token required");
     return;
@@ -63,9 +89,9 @@ app.get("/admin", async (req, res) => {
     </body>
     </html>
   `);
-});
+}));
 
-app.get("/pay/:orderId", async (req, res) => {
+app.get("/pay/:orderId", asyncRoute(async (req, res) => {
   const order = await getOrder(req.params.orderId);
   if (!order) {
     res.status(404).send("Order not found");
@@ -98,7 +124,7 @@ app.get("/pay/:orderId", async (req, res) => {
     </body>
     </html>
   `);
-});
+}));
 
 function webhookBody(req) {
   if (!Buffer.isBuffer(req.body)) return req.body || {};
@@ -111,7 +137,7 @@ function webhookBody(req) {
   }
 }
 
-app.all("/webhook/cashfree", async (req, res) => {
+app.all("/webhook/cashfree", asyncRoute(async (req, res) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     res.set("Allow", "GET,HEAD,OPTIONS,POST");
     res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
@@ -141,7 +167,7 @@ app.all("/webhook/cashfree", async (req, res) => {
 
   if (["SUCCESS", "PAID", "ACTIVE"].includes(String(status).toUpperCase())) {
     const order = await completeOrder(orderId);
-    await bot.sendMessage(
+    await bot?.sendMessage(
       order.user_id,
       `✅ <b>Payment Complete</b>\n\n██████████ 100%\n\nOrder: <code>${order.order_id}</code>\nCoupon: <code>${order.coupon_code}</code>`,
       { parse_mode: "HTML" },
@@ -149,8 +175,14 @@ app.all("/webhook/cashfree", async (req, res) => {
   }
 
   res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
+}));
+
+app.use((error, _req, res, _next) => {
+  logger.error({ error }, "HTTP request failed");
+  res.status(500).json({ ok: false, error: "Internal server error" });
 });
 
 app.listen(config.port, () => {
   logger.info({ port: config.port }, "FlashXBBbot server started");
+  bootstrap();
 });

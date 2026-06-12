@@ -4,6 +4,8 @@ import { logger } from "./logger.js";
 
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
+  connectionTimeoutMillis: 10000,
+  query_timeout: 10000,
   ssl: config.databaseUrl.includes("railway") || config.databaseUrl.includes("postgres")
     ? { rejectUnauthorized: false }
     : false,

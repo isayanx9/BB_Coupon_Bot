@@ -20,6 +20,9 @@ export async function createCashfreeOrder(order, userId) {
   if (!config.publicBaseUrl) {
     throw new Error("PUBLIC_BASE_URL is required for Cashfree checkout links. Set it to your Railway public URL.");
   }
+  if (!config.cashfreeClientId || !config.cashfreeClientSecret) {
+    throw new Error("Cashfree API keys are missing. Set CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET in Railway.");
+  }
 
   const payload = {
     order_id: order.order_id,

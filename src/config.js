@@ -5,8 +5,6 @@ dotenv.config();
 const required = [
   "BOT_TOKEN",
   "DATABASE_URL",
-  "CASHFREE_CLIENT_ID",
-  "CASHFREE_CLIENT_SECRET",
 ];
 
 function normalizeBaseUrl(value) {
