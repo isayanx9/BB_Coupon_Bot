@@ -45,11 +45,7 @@ app.get("/", (_req, res) => {
   res.json({ ok: true, service: "FlashXBBbot", theme: "black-yellow-cyber", mode: process.env.NODE_ENV || "development" });
 });
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, app: true, bot: Boolean(bot), ready: bootstrapReady });
-});
-
-app.get("/ready", asyncRoute(async (_req, res) => {
+app.get("/health", asyncRoute(async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     res.json({ ok: true, app: true, database: true, bot: Boolean(bot), ready: bootstrapReady });
@@ -186,7 +182,7 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ ok: false, error: "Internal server error" });
 });
 
-app.listen(config.port, "0.0.0.0", () => {
-  logger.info({ host: "0.0.0.0", port: config.port }, "FlashXBBbot server started");
+app.listen(config.port, () => {
+  logger.info({ port: config.port }, "FlashXBBbot server started");
   bootstrap();
 });

@@ -205,15 +205,10 @@ async function handleCallback(bot, callback) {
         await paymentAnimation(bot, chatId);
         const cashfree = await createCashfreeOrder(order, callback.from.id);
         await import("./repositories.js").then(({ attachPaymentSession }) => attachPaymentSession(order.order_id, cashfree.payment_session_id));
-        const paymentUrl =
-          cashfree.payment_link ||
-          cashfree.payments?.url ||
-          cashfree.payment_url ||
-          `${config.publicBaseUrl}/pay/${order.order_id}`;
         await bot.sendMessage(
           chatId,
           `📄 <b>Invoice</b>\n\n<code>${order.invoice_text}</code>\nPayable now: <b>₹${order.payable_amount}</b>`,
-          paymentKeyboard(order, paymentUrl),
+          paymentKeyboard(order, `${config.publicBaseUrl}/pay/${order.order_id}`),
         );
       }
     }
@@ -221,14 +216,13 @@ async function handleCallback(bot, callback) {
     if (data.startsWith("verify:")) {
       const orderId = data.split(":")[1];
       const cashfree = await getCashfreeOrder(orderId);
-      const orderStatus = String(cashfree.order_status || cashfree.payment_status || "").toUpperCase();
-      await logPayment(orderId, orderStatus || "CHECKED", cashfree);
+      await logPayment(orderId, cashfree.order_status || "CHECKED", cashfree);
 
-      if (["PAID", "SUCCESS", "ACTIVE"].includes(orderStatus)) {
+      if (["PAID", "ACTIVE"].includes(cashfree.order_status)) {
         const completed = await completeOrder(orderId);
         await bot.sendMessage(chatId, deliveryText(completed), { parse_mode: "HTML" });
       } else {
-        await bot.sendMessage(chatId, `Payment status: ${orderStatus || "not confirmed"}`);
+        await bot.sendMessage(chatId, `Payment status: ${cashfree.order_status || "not confirmed"}`);
       }
     }
 
