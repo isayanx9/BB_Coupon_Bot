@@ -5,15 +5,24 @@ dotenv.config();
 const required = [
   "BOT_TOKEN",
   "DATABASE_URL",
-  "PUBLIC_BASE_URL",
   "CASHFREE_CLIENT_ID",
   "CASHFREE_CLIENT_SECRET",
 ];
 
+function normalizeBaseUrl(value) {
+  if (!value) return "";
+  const trimmed = value.replace(/\/$/, "");
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+const inferredPublicBaseUrl = normalizeBaseUrl(
+  process.env.PUBLIC_BASE_URL || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL || "",
+);
+
 export const config = {
   botToken: process.env.BOT_TOKEN || "",
   databaseUrl: process.env.DATABASE_URL || "",
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, ""),
+  publicBaseUrl: inferredPublicBaseUrl,
   cashfreeClientId: process.env.CASHFREE_CLIENT_ID || "",
   cashfreeClientSecret: process.env.CASHFREE_CLIENT_SECRET || "",
   cashfreeEnv: process.env.CASHFREE_ENV || "production",

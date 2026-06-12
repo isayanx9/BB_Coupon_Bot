@@ -60,6 +60,8 @@ npm start
 
 1. Create a Railway PostgreSQL database.
 2. Set all required variables from `.env.example`.
+   `PUBLIC_BASE_URL` should be your Railway public URL, for example `https://your-app.up.railway.app`.
+   If it is not set, the bot tries Railway's `RAILWAY_PUBLIC_DOMAIN` automatically so deployment can still boot.
 3. Deploy from GitHub.
 4. Set Cashfree webhook URL to:
 
