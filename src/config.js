@@ -8,7 +8,6 @@ const required = [
   "PUBLIC_BASE_URL",
   "CASHFREE_CLIENT_ID",
   "CASHFREE_CLIENT_SECRET",
-  "ADMIN_USER_ID",
 ];
 
 export const config = {
@@ -35,7 +34,7 @@ export function assertConfig() {
   const missing = required.filter((key) => !process.env[key]);
 
   if (!config.adminUserId) {
-    missing.push("ADMIN_USER_ID");
+    missing.push("ADMIN_USER_ID or ADMIN_ID");
   }
 
   if (missing.length) {

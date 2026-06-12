@@ -15,7 +15,7 @@ await migrate();
 const bot = createBot();
 const app = express();
 
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
