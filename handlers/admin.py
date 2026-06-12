@@ -1,4 +1,6 @@
+import csv
 from html import escape
+from pathlib import Path
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -7,10 +9,21 @@ from aiogram.types import Message
 from config import ADMIN_ID
 from database.crud import (
     add_coupon,
+    add_ticket_reply,
+    add_wallet_credit,
+    audit_admin_action,
     ban_user,
+    close_ticket,
+    create_flash_sale,
     delete_coupon_group,
+    export_backup_rows,
     get_all_bot_settings,
     get_all_user_ids,
+    get_analytics_snapshot,
+    get_recent_audit_logs,
+    get_open_tickets,
+    get_ticket_by_id,
+    get_order_by_id,
     get_banned_users,
     get_cancelled_orders,
     get_completed_orders,
@@ -21,11 +34,13 @@ from database.crud import (
     get_total_orders,
     get_total_revenue,
     get_total_users,
+    get_stock_alert_user_ids,
     is_user_banned,
     set_bot_setting,
     unban_user,
     update_coupon_price,
 )
+from services.coupon_service import deliver_coupon
 from keyboards.admin import developer_menu
 from keyboards.user import admin_main_menu, user_main_menu
 from states.order_states import (
@@ -33,26 +48,36 @@ from states.order_states import (
     BroadcastState,
     CouponUpload,
     DeleteCouponState,
+    FlashSaleState,
     PriceState,
     SettingState,
+    TicketReplyState,
     UnbanState,
+    WalletCreditState,
 )
 from texts import (
     BTN_ADD_COUPON,
+    BTN_ANALYTICS,
+    BTN_AUDIT_LOGS,
+    BTN_BACKUP,
     BTN_BAN_USER,
     BTN_BROADCAST,
     BTN_CONTROL_CENTER,
     BTN_DELETE_COUPON,
     BTN_EXIT_DEVELOPER,
+    BTN_FLASH_SALE,
     BTN_INVENTORY,
     BTN_MAIN_MENU,
     BTN_ORDERS,
     BTN_PAYMENTS,
+    BTN_REPLY_TICKET,
     BTN_SETTINGS,
     BTN_SET_PRICE,
     BTN_STATISTICS,
+    BTN_TICKETS,
     BTN_UNBAN_USER,
     BTN_USERS,
+    BTN_WALLET_CREDIT,
     COUPON_NAME,
 )
 
@@ -128,7 +153,7 @@ async def add_coupon_button(message: Message, state: FSMContext):
 
 
 @router.message(CouponUpload.waiting_for_bulk_coupons)
-async def process_bulk_coupon(message: Message, state: FSMContext):
+async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
         return
 
@@ -161,6 +186,23 @@ async def process_bulk_coupon(message: Message, state: FSMContext):
         f"<blockquote>✅ Added: <b>{added}</b>\n"
         f"⚠️ Failed: <b>{failed}</b></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "bulk_coupon_upload", f"added={added}, failed={failed}")
+
+    if added:
+        sent = 0
+        for user_id in get_stock_alert_user_ids():
+            try:
+                await bot.send_message(
+                    user_id,
+                    "🔔 <b>Fresh coupon stock added.</b>\n\n"
+                    "<blockquote>Open Deal Vault before it sells out.</blockquote>",
+                )
+                sent += 1
+            except Exception:
+                pass
+
+        await message.answer(f"🔔 Restock alerts sent: <b>{sent}</b>")
+
     await state.clear()
 
 
@@ -197,6 +239,24 @@ async def statistics(message: Message):
         f"📋 Total Orders: <b>{get_total_orders()}</b>\n"
         f"👥 Known Users: <b>{get_total_users()}</b>\n"
         f"💰 Revenue: <b>Rs {get_total_revenue()}</b></blockquote>"
+    )
+
+
+@router.message(F.text == BTN_ANALYTICS)
+async def analytics(message: Message):
+    if not is_admin(message):
+        return
+
+    data = get_analytics_snapshot()
+    await message.answer(
+        "📈 <b>Analytics</b>\n\n"
+        f"<blockquote>Revenue: <b>Rs {data['revenue']}</b>\n"
+        f"Orders: <b>{data['total_orders']}</b>\n"
+        f"Success: <b>{data['success_orders']}</b>\n"
+        f"Pending: <b>{data['pending_orders']}</b>\n"
+        f"Conversion: <b>{data['conversion']}%</b>\n"
+        f"Users: <b>{data['total_users']}</b>\n"
+        f"Available Coupons: <b>{data['available_coupons']}</b></blockquote>"
     )
 
 
@@ -293,6 +353,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
         "✨ <b>Broadcast complete</b>\n\n"
         f"<blockquote>Sent: <b>{sent}</b>\nFailed: <b>{failed}</b></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "broadcast", f"sent={sent}, failed={failed}")
     await state.clear()
 
 
@@ -345,6 +406,7 @@ async def settings_value(message: Message, state: FSMContext):
         "✅ <b>Setting saved</b>\n\n"
         f"<blockquote><code>{escape(key)}</code> = <b>{escape(value)}</b></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "setting_update", f"{key}={value}")
     await state.clear()
 
 
@@ -387,6 +449,7 @@ async def ban_user_reason(message: Message, state: FSMContext):
         "🚫 <b>User banned</b>\n\n"
         f"<blockquote>User: <code>{user_id}</code>\nReason: <i>{escape(reason)}</i></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "ban_user", f"{user_id}: {reason}")
     await state.clear()
 
 
@@ -460,6 +523,7 @@ async def set_price_value(message: Message, state: FSMContext):
         f"New Price: <b>Rs {price}</b>\n"
         f"Rows Updated: <b>{updated}</b></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "set_price", f"{coupon_name}: {price}")
     await state.clear()
 
 
@@ -488,4 +552,260 @@ async def delete_coupon_name(message: Message, state: FSMContext):
         f"<blockquote>Coupon: <code>{escape(coupon_name)}</code>\n"
         f"Unsold rows deleted: <b>{deleted}</b></blockquote>"
     )
+    audit_admin_action(message.from_user.id, "delete_coupon", f"{coupon_name}: {deleted}")
     await state.clear()
+
+
+@router.message(F.text == BTN_TICKETS)
+async def tickets(message: Message):
+    if not is_admin(message):
+        return
+
+    tickets_list = get_open_tickets()
+    lines = []
+
+    for ticket in tickets_list:
+        lines.append(
+            f"🎫 <code>{ticket.id}</code> • User <code>{ticket.user_id}</code>\n"
+            f"{escape(ticket.subject)}"
+        )
+
+    await message.answer(
+        "🎫 <b>Open Tickets</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No open tickets.'}</blockquote>"
+    )
+
+
+@router.message(F.text == BTN_REPLY_TICKET)
+async def ticket_reply_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    await message.answer("💬 <b>Send ticket ID to reply.</b>")
+    await state.set_state(TicketReplyState.waiting_for_ticket_id)
+
+
+@router.message(TicketReplyState.waiting_for_ticket_id)
+async def ticket_reply_id(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    try:
+        ticket_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("Send a numeric ticket ID.")
+        return
+
+    await state.update_data(ticket_id=ticket_id)
+    await message.answer("✍️ <b>Send admin reply.</b>")
+    await state.set_state(TicketReplyState.waiting_for_reply)
+
+
+@router.message(TicketReplyState.waiting_for_reply)
+async def ticket_reply_send(message: Message, state: FSMContext, bot: Bot):
+    if not is_admin(message):
+        return
+
+    data = await state.get_data()
+    ticket_id = data["ticket_id"]
+    ok = add_ticket_reply(ticket_id, "admin", message.text or "")
+
+    if ok:
+        ticket = get_ticket_by_id(ticket_id)
+        close_ticket(ticket_id)
+        if ticket:
+            try:
+                await bot.send_message(
+                    ticket.user_id,
+                    "💬 <b>Admin replied to your ticket</b>\n\n"
+                    f"<blockquote>{escape(message.text or '')}</blockquote>",
+                )
+            except Exception:
+                pass
+        await message.answer("✅ <b>Ticket replied and closed.</b>")
+        audit_admin_action(message.from_user.id, "ticket_reply", str(ticket_id))
+    else:
+        await message.answer("⚠️ <b>Ticket not found.</b>")
+
+    await state.clear()
+
+
+@router.message(F.text == BTN_WALLET_CREDIT)
+async def wallet_credit_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    await message.answer("💎 <b>Send user ID for wallet credit.</b>")
+    await state.set_state(WalletCreditState.waiting_for_user_id)
+
+
+@router.message(WalletCreditState.waiting_for_user_id)
+async def wallet_credit_user(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    try:
+        user_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("Send a numeric user ID.")
+        return
+
+    await state.update_data(user_id=user_id)
+    await message.answer("💰 <b>Send credit amount in Rs.</b>")
+    await state.set_state(WalletCreditState.waiting_for_amount)
+
+
+@router.message(WalletCreditState.waiting_for_amount)
+async def wallet_credit_amount(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    try:
+        amount = int(message.text.strip())
+    except ValueError:
+        await message.answer("Send a number only.")
+        return
+
+    await state.update_data(amount=amount)
+    await message.answer("📝 <b>Send reason.</b>")
+    await state.set_state(WalletCreditState.waiting_for_reason)
+
+
+@router.message(WalletCreditState.waiting_for_reason)
+async def wallet_credit_reason(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    data = await state.get_data()
+    add_wallet_credit(data["user_id"], data["amount"], message.text or "Admin credit")
+    await message.answer(
+        "✅ <b>Wallet credited.</b>\n\n"
+        f"<blockquote>User: <code>{data['user_id']}</code>\nAmount: <b>Rs {data['amount']}</b></blockquote>"
+    )
+    audit_admin_action(message.from_user.id, "wallet_credit", str(data))
+    await state.clear()
+
+
+@router.message(F.text == BTN_FLASH_SALE)
+async def flash_sale_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    await message.answer("⚡ <b>Send coupon name for flash sale.</b>")
+    await state.set_state(FlashSaleState.waiting_for_coupon_name)
+
+
+@router.message(FlashSaleState.waiting_for_coupon_name)
+async def flash_sale_coupon(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    await state.update_data(coupon_name=message.text.strip())
+    await message.answer("🏷 <b>Send flash sale title.</b>")
+    await state.set_state(FlashSaleState.waiting_for_title)
+
+
+@router.message(FlashSaleState.waiting_for_title)
+async def flash_sale_title(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    await state.update_data(title=message.text.strip())
+    await message.answer("💥 <b>Send discount text, example: 2 hour drop.</b>")
+    await state.set_state(FlashSaleState.waiting_for_discount_text)
+
+
+@router.message(FlashSaleState.waiting_for_discount_text)
+async def flash_sale_discount(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    data = await state.get_data()
+    sale_id = create_flash_sale(
+        data["coupon_name"],
+        data["title"],
+        message.text.strip(),
+    )
+    await message.answer(
+        "⚡ <b>Flash sale created.</b>\n\n"
+        f"<blockquote>Sale ID: <code>{sale_id}</code></blockquote>"
+    )
+    audit_admin_action(message.from_user.id, "flash_sale", str(data))
+    await state.clear()
+
+
+@router.message(F.text == BTN_BACKUP)
+async def backup(message: Message):
+    if not is_admin(message):
+        return
+
+    rows = export_backup_rows()
+    backup_dir = Path("database/backups")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    coupons_path = backup_dir / "coupons_backup.csv"
+    orders_path = backup_dir / "orders_backup.csv"
+
+    with coupons_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["id", "name", "code", "discount", "minimum", "price", "sold"])
+        writer.writerows(rows["coupons"])
+
+    with orders_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["order_id", "user_id", "coupon", "amount", "payment", "delivery", "created"])
+        writer.writerows(rows["orders"])
+
+    await message.answer(
+        "📤 <b>Backup created.</b>\n\n"
+        f"<blockquote><code>{coupons_path}</code>\n<code>{orders_path}</code></blockquote>"
+    )
+    audit_admin_action(message.from_user.id, "backup", "csv")
+
+
+@router.message(F.text == BTN_AUDIT_LOGS)
+async def audit_logs(message: Message):
+    if not is_admin(message):
+        return
+
+    logs = get_recent_audit_logs()
+    lines = [
+        f"🧾 <code>{log.admin_id}</code> • <b>{escape(log.action)}</b>\n{escape(log.details or '')}"
+        for log in logs
+    ]
+    await message.answer(
+        "🧾 <b>Audit Logs</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No audit logs yet.'}</blockquote>"
+    )
+
+
+@router.message(F.text.startswith("/retry_delivery "))
+async def retry_delivery(message: Message, bot: Bot):
+    if not await admin_only(message):
+        return
+
+    order_id = message.text.replace("/retry_delivery ", "").strip()
+    order = get_order_by_id(order_id)
+
+    if not order:
+        await message.answer("⚠️ <b>Order not found.</b>")
+        return
+
+    coupon_code = deliver_coupon(order.coupon_name)
+
+    if not coupon_code:
+        await message.answer("⚠️ <b>No unsold stock available for retry.</b>")
+        return
+
+    from database.crud import update_delivery_status, update_order_status
+
+    update_order_status(order_id, "SUCCESS")
+    update_delivery_status(order_id, "DELIVERED")
+
+    await bot.send_message(
+        order.user_id,
+        "🎉 <b>Delivery Retry Successful</b>\n\n"
+        f"<blockquote>Order: <code>{order_id}</code>\n"
+        f"Coupon Code:\n<code>{coupon_code}</code></blockquote>",
+    )
+    await message.answer("✅ <b>Retry delivery complete.</b>")
+    audit_admin_action(message.from_user.id, "retry_delivery", order_id)

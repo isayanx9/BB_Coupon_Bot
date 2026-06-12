@@ -7,6 +7,7 @@ from aiogram.enums import ParseMode
 from sqlalchemy import text
 
 from config import (
+    ADMIN_WEB_TOKEN,
     BOT_TOKEN,
     CASHFREE_CLIENT_ID,
     CASHFREE_CLIENT_SECRET,
@@ -14,8 +15,12 @@ from config import (
     PUBLIC_BASE_URL,
 )
 from database.crud import (
+    get_analytics_snapshot,
+    get_coupon_summary,
+    get_open_tickets,
     get_order_by_id,
     get_payment_session,
+    get_recent_audit_logs,
     update_delivery_status,
     update_order_status,
 )
@@ -23,6 +28,10 @@ import database.db as database_db
 from services.coupon_service import deliver_coupon
 
 app = FastAPI()
+
+
+def web_admin_allowed(token):
+    return bool(ADMIN_WEB_TOKEN and token == ADMIN_WEB_TOKEN)
 
 
 @app.get("/")
@@ -62,6 +71,65 @@ async def health():
         "cashfree_env": CASHFREE_ENV,
         "public_base_url": PUBLIC_BASE_URL,
     }
+
+
+@app.get("/admin")
+async def admin_dashboard(token: str = ""):
+    if not web_admin_allowed(token):
+        return HTMLResponse("<h1>403</h1><p>Admin token required.</p>", status_code=403)
+
+    analytics = get_analytics_snapshot()
+    coupons = get_coupon_summary()
+    tickets = get_open_tickets()
+    logs = get_recent_audit_logs()
+
+    coupon_rows = "".join(
+        f"<tr><td>{item['name']}</td><td>{item['available']}</td><td>{item['sold']}</td><td>Rs {item['price']}</td></tr>"
+        for item in coupons
+    )
+    ticket_rows = "".join(
+        f"<tr><td>{ticket.id}</td><td>{ticket.user_id}</td><td>{ticket.subject}</td><td>{ticket.status}</td></tr>"
+        for ticket in tickets
+    )
+    log_rows = "".join(
+        f"<tr><td>{log.created_at}</td><td>{log.admin_id}</td><td>{log.action}</td><td>{log.details}</td></tr>"
+        for log in logs
+    )
+
+    html = f"""
+    <!doctype html>
+    <html>
+    <head>
+        <title>BB Coupon Admin</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }}
+            header {{ background: #0f172a; color: white; padding: 24px; }}
+            main {{ padding: 24px; display: grid; gap: 18px; }}
+            section {{ background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; }}
+            .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }}
+            .metric {{ background: #ecfeff; border-left: 4px solid #0891b2; padding: 12px; border-radius: 6px; }}
+            table {{ width: 100%; border-collapse: collapse; }}
+            th, td {{ border-bottom: 1px solid #e2e8f0; padding: 8px; text-align: left; }}
+        </style>
+    </head>
+    <body>
+        <header><h1>⚡ BB Coupon Admin</h1><p>Cutie control dashboard</p></header>
+        <main>
+            <section class="metrics">
+                <div class="metric"><b>Revenue</b><br>Rs {analytics['revenue']}</div>
+                <div class="metric"><b>Orders</b><br>{analytics['total_orders']}</div>
+                <div class="metric"><b>Conversion</b><br>{analytics['conversion']}%</div>
+                <div class="metric"><b>Users</b><br>{analytics['total_users']}</div>
+            </section>
+            <section><h2>Inventory</h2><table><tr><th>Coupon</th><th>Available</th><th>Sold</th><th>Price</th></tr>{coupon_rows}</table></section>
+            <section><h2>Tickets</h2><table><tr><th>ID</th><th>User</th><th>Subject</th><th>Status</th></tr>{ticket_rows}</table></section>
+            <section><h2>Audit</h2><table><tr><th>Time</th><th>Admin</th><th>Action</th><th>Details</th></tr>{log_rows}</table></section>
+        </main>
+    </body>
+    </html>
+    """
+    return HTMLResponse(html)
 
 
 @app.get("/pay/{order_id}")

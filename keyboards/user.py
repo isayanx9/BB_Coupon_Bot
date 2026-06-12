@@ -1,8 +1,5 @@
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-)
 
 from config import CHANNEL_USERNAME, GROUP_USERNAME
 from texts import (
@@ -15,43 +12,27 @@ from texts import (
     BTN_JOIN_CHANNEL,
     BTN_JOIN_GROUP,
     BTN_PROFILE,
+    BTN_REFERRAL,
+    BTN_STOCK_ALERTS,
     BTN_SUPPORT,
     BTN_VERIFY,
+    BTN_WALLET,
 )
 
 
 def join_keyboard():
     kb = InlineKeyboardBuilder()
-
-    kb.button(
-        text=BTN_JOIN_CHANNEL,
-        url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}",
-    )
-    kb.button(
-        text=BTN_JOIN_GROUP,
-        url=f"https://t.me/{GROUP_USERNAME.lstrip('@')}",
-    )
-    kb.button(
-        text=BTN_VERIFY,
-        callback_data="verify_user",
-    )
-
+    kb.button(text=BTN_JOIN_CHANNEL, url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")
+    kb.button(text=BTN_JOIN_GROUP, url=f"https://t.me/{GROUP_USERNAME.lstrip('@')}")
+    kb.button(text=BTN_VERIFY, callback_data="verify_user")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def terms_keyboard():
     kb = InlineKeyboardBuilder()
-
-    kb.button(
-        text=BTN_ACCEPT,
-        callback_data="accept_terms",
-    )
-    kb.button(
-        text=BTN_DECLINE,
-        callback_data="decline_terms",
-    )
-
+    kb.button(text=BTN_ACCEPT, callback_data="accept_terms")
+    kb.button(text=BTN_DECLINE, callback_data="decline_terms")
     kb.adjust(2)
     return kb.as_markup()
 
@@ -59,17 +40,10 @@ def terms_keyboard():
 def user_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text=BTN_DEAL_VAULT),
-                KeyboardButton(text=BTN_ACCESS_LOG),
-            ],
-            [
-                KeyboardButton(text=BTN_AI_ASSIST),
-                KeyboardButton(text=BTN_PROFILE),
-            ],
-            [
-                KeyboardButton(text=BTN_SUPPORT),
-            ],
+            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_STOCK_ALERTS)],
         ],
         resize_keyboard=True,
         input_field_placeholder="FLASH-X AI",
@@ -79,20 +53,11 @@ def user_main_menu():
 def admin_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text=BTN_DEAL_VAULT),
-                KeyboardButton(text=BTN_ACCESS_LOG),
-            ],
-            [
-                KeyboardButton(text=BTN_AI_ASSIST),
-                KeyboardButton(text=BTN_PROFILE),
-            ],
-            [
-                KeyboardButton(text=BTN_SUPPORT),
-            ],
-            [
-                KeyboardButton(text=BTN_CONTROL_CENTER),
-            ],
+            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_STOCK_ALERTS)],
+            [KeyboardButton(text=BTN_CONTROL_CENTER)],
         ],
         resize_keyboard=True,
         input_field_placeholder="FLASH-X CONTROL CENTER",

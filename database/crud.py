@@ -1,5 +1,17 @@
 from database.db import SessionLocal
-from database.models import BannedUser, BotSetting, Coupon, Order, User
+from database.models import (
+    AdminAuditLog,
+    BannedUser,
+    BotSetting,
+    Coupon,
+    FlashSale,
+    Order,
+    Referral,
+    StockAlert,
+    SupportTicket,
+    User,
+    WalletTransaction,
+)
 
 import uuid
 
@@ -193,6 +205,444 @@ def get_all_bot_settings():
 
     try:
         return db.query(BotSetting).order_by(BotSetting.key).all()
+
+    finally:
+        db.close()
+
+
+def add_wallet_credit(user_id, amount, reason):
+    db = SessionLocal()
+
+    try:
+        tx = WalletTransaction(
+            user_id=user_id,
+            amount=amount,
+            reason=reason,
+        )
+        db.add(tx)
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_wallet_balance(user_id):
+    db = SessionLocal()
+
+    try:
+        transactions = (
+            db.query(WalletTransaction)
+            .filter(WalletTransaction.user_id == user_id)
+            .all()
+        )
+        return sum(tx.amount for tx in transactions)
+
+    finally:
+        db.close()
+
+
+def create_referral(referrer_id, referred_id, reward_amount=0):
+    if str(referrer_id) == str(referred_id):
+        return False
+
+    db = SessionLocal()
+
+    try:
+        existing = (
+            db.query(Referral)
+            .filter(Referral.referred_id == referred_id)
+            .first()
+        )
+
+        if existing:
+            return False
+
+        referral = Referral(
+            referrer_id=referrer_id,
+            referred_id=referred_id,
+            reward_amount=reward_amount,
+        )
+        db.add(referral)
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def reward_referral_if_needed(referred_id, default_reward=5):
+    db = SessionLocal()
+
+    try:
+        referral = (
+            db.query(Referral)
+            .filter(
+                Referral.referred_id == referred_id,
+                Referral.rewarded == False
+            )
+            .first()
+        )
+
+        if not referral:
+            return False
+
+        reward = referral.reward_amount or default_reward
+        referral.reward_amount = reward
+        referral.rewarded = True
+        db.add(
+            WalletTransaction(
+                user_id=referral.referrer_id,
+                amount=reward,
+                reason=f"Referral reward for {referred_id}",
+            )
+        )
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_referral_count(user_id):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(Referral)
+            .filter(Referral.referrer_id == user_id)
+            .count()
+        )
+
+    finally:
+        db.close()
+
+
+def create_support_ticket(user_id, subject, message):
+    db = SessionLocal()
+
+    try:
+        ticket = SupportTicket(
+            user_id=user_id,
+            subject=subject[:255],
+            messages=f"USER: {message}",
+        )
+        db.add(ticket)
+        db.commit()
+        return ticket.id
+
+    except Exception:
+        db.rollback()
+        return None
+
+    finally:
+        db.close()
+
+
+def add_ticket_reply(ticket_id, sender, message):
+    db = SessionLocal()
+
+    try:
+        ticket = (
+            db.query(SupportTicket)
+            .filter(SupportTicket.id == ticket_id)
+            .first()
+        )
+
+        if not ticket:
+            return False
+
+        ticket.messages = (
+            f"{ticket.messages}\n\n{sender.upper()}: {message}"
+        )[:4000]
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def close_ticket(ticket_id):
+    db = SessionLocal()
+
+    try:
+        ticket = (
+            db.query(SupportTicket)
+            .filter(SupportTicket.id == ticket_id)
+            .first()
+        )
+
+        if not ticket:
+            return False
+
+        ticket.status = "CLOSED"
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_open_tickets(limit=10):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(SupportTicket)
+            .filter(SupportTicket.status == "OPEN")
+            .order_by(SupportTicket.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def get_ticket_by_id(ticket_id):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(SupportTicket)
+            .filter(SupportTicket.id == ticket_id)
+            .first()
+        )
+
+    finally:
+        db.close()
+
+
+def subscribe_stock_alert(user_id, coupon_name="ALL"):
+    db = SessionLocal()
+
+    try:
+        alert = (
+            db.query(StockAlert)
+            .filter(
+                StockAlert.user_id == user_id,
+                StockAlert.coupon_name == coupon_name,
+                StockAlert.active == True
+            )
+            .first()
+        )
+
+        if alert:
+            return True
+
+        db.add(
+            StockAlert(
+                user_id=user_id,
+                coupon_name=coupon_name,
+            )
+        )
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_stock_alert_user_ids(coupon_name=None):
+    db = SessionLocal()
+
+    try:
+        query = db.query(StockAlert).filter(StockAlert.active == True)
+
+        if coupon_name:
+            query = query.filter(
+                (StockAlert.coupon_name == coupon_name)
+                | (StockAlert.coupon_name == "ALL")
+            )
+
+        return list({alert.user_id for alert in query.all()})
+
+    finally:
+        db.close()
+
+
+def audit_admin_action(admin_id, action, details=""):
+    db = SessionLocal()
+
+    try:
+        db.add(
+            AdminAuditLog(
+                admin_id=admin_id,
+                action=action,
+                details=details[:1000],
+            )
+        )
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_recent_audit_logs(limit=10):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(AdminAuditLog)
+            .order_by(AdminAuditLog.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def create_flash_sale(coupon_name, title, discount_text, expires_at=None):
+    db = SessionLocal()
+
+    try:
+        sale = FlashSale(
+            coupon_name=coupon_name,
+            title=title,
+            discount_text=discount_text,
+            expires_at=expires_at,
+        )
+        db.add(sale)
+        db.commit()
+        return sale.id
+
+    except Exception:
+        db.rollback()
+        return None
+
+    finally:
+        db.close()
+
+
+def get_active_flash_sales(limit=5):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(FlashSale)
+            .filter(FlashSale.active == True)
+            .order_by(FlashSale.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def get_analytics_snapshot():
+    db = SessionLocal()
+
+    try:
+        total_orders = db.query(Order).count()
+        success_orders = (
+            db.query(Order)
+            .filter(Order.payment_status == "SUCCESS")
+            .count()
+        )
+        pending_orders = (
+            db.query(Order)
+            .filter(Order.payment_status == "PENDING")
+            .count()
+        )
+        total_users = db.query(User).count()
+        total_coupons = db.query(Coupon).count()
+        available_coupons = (
+            db.query(Coupon)
+            .filter(Coupon.sold == False)
+            .count()
+        )
+        revenue = sum(
+            order.amount
+            for order in db.query(Order)
+            .filter(Order.payment_status == "SUCCESS")
+            .all()
+        )
+
+        conversion = (
+            round((success_orders / total_orders) * 100, 2)
+            if total_orders
+            else 0
+        )
+
+        return {
+            "total_orders": total_orders,
+            "success_orders": success_orders,
+            "pending_orders": pending_orders,
+            "total_users": total_users,
+            "total_coupons": total_coupons,
+            "available_coupons": available_coupons,
+            "revenue": revenue,
+            "conversion": conversion,
+        }
+
+    finally:
+        db.close()
+
+
+def export_backup_rows():
+    db = SessionLocal()
+
+    try:
+        coupons = db.query(Coupon).order_by(Coupon.id.asc()).all()
+        orders = db.query(Order).order_by(Order.id.asc()).all()
+
+        return {
+            "coupons": [
+                [
+                    c.id,
+                    c.coupon_name,
+                    c.coupon_code,
+                    c.discount_value,
+                    c.minimum_order,
+                    c.selling_price,
+                    c.sold,
+                ]
+                for c in coupons
+            ],
+            "orders": [
+                [
+                    o.order_id,
+                    o.user_id,
+                    o.coupon_name,
+                    o.amount,
+                    o.payment_status,
+                    o.delivery_status,
+                    o.created_at,
+                ]
+                for o in orders
+            ],
+        }
 
     finally:
         db.close()

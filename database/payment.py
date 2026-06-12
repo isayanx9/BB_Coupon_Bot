@@ -72,3 +72,50 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         data.setdefault("status_code", response.status_code)
 
     return data
+
+
+def get_cashfree_order_status(order_id):
+    base_url = (
+        "https://sandbox.cashfree.com/pg/orders"
+        if CASHFREE_ENV == "sandbox"
+        else "https://api.cashfree.com/pg/orders"
+    )
+
+    if not CASHFREE_CLIENT_ID or not CASHFREE_CLIENT_SECRET:
+        return {
+            "error": "Cashfree credentials are missing",
+        }
+
+    headers = {
+        "accept": "application/json",
+        "x-client-id": CASHFREE_CLIENT_ID,
+        "x-client-secret": CASHFREE_CLIENT_SECRET,
+        "x-api-version": "2023-08-01",
+    }
+
+    try:
+        response = requests.get(
+            f"{base_url}/{order_id}",
+            headers=headers,
+            timeout=20,
+        )
+    except requests.RequestException as error:
+        return {
+            "error": "Could not connect to Cashfree",
+            "hint": str(error),
+        }
+
+    try:
+        data = response.json()
+    except ValueError:
+        return {
+            "error": "Invalid response from Cashfree",
+            "status_code": response.status_code,
+            "body": response.text,
+        }
+
+    if response.status_code >= 400:
+        data.setdefault("error", "Cashfree status check failed")
+        data.setdefault("status_code", response.status_code)
+
+    return data

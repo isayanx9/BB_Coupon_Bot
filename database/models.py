@@ -70,6 +70,70 @@ class BotSetting(Base):
     value = Column(String(1000))
 
 
+class WalletTransaction(Base):
+    __tablename__ = "wallet_transactions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    amount = Column(Integer)
+    reason = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Referral(Base):
+    __tablename__ = "referrals"
+
+    id = Column(Integer, primary_key=True)
+    referrer_id = Column(BigInteger)
+    referred_id = Column(BigInteger, unique=True)
+    reward_amount = Column(Integer, default=0)
+    rewarded = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    subject = Column(String(255))
+    status = Column(String(50), default="OPEN")
+    messages = Column(String(4000), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class StockAlert(Base):
+    __tablename__ = "stock_alerts"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    coupon_name = Column(String(255), default="ALL")
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    admin_id = Column(BigInteger)
+    action = Column(String(255))
+    details = Column(String(1000))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FlashSale(Base):
+    __tablename__ = "flash_sales"
+
+    id = Column(Integer, primary_key=True)
+    coupon_name = Column(String(255))
+    title = Column(String(255))
+    discount_text = Column(String(255))
+    active = Column(Boolean, default=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # =========================
 # COUPONS
 # =========================

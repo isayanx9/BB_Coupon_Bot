@@ -26,6 +26,7 @@ CASHFREE_CUSTOMER_PHONE = os.getenv("CASHFREE_CUSTOMER_PHONE", "9999999999")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
+ADMIN_WEB_TOKEN = os.getenv("ADMIN_WEB_TOKEN", "").strip()
 
 
 def require_env():
