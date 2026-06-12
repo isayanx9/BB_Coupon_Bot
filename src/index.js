@@ -99,24 +99,14 @@ app.get("/pay/:orderId", async (req, res) => {
   `);
 });
 
-app.get("/webhook/cashfree", (_req, res) => {
-  res.json({ ok: true, provider: "cashfree", service: "FlashXBBbot webhook active" });
-});
-
 app.post("/webhook/cashfree", async (req, res) => {
-  const orderId = req.body?.data?.order?.order_id || req.body?.order_id;
-  const status = req.body?.data?.payment?.payment_status || req.body?.order_status;
-
-  if (!orderId) {
-    res.json({ ok: true, provider: "cashfree", received: true });
-    return;
-  }
-
   if (!validateCashfreeWebhook(req)) {
     res.status(401).json({ ok: false });
     return;
   }
 
+  const orderId = req.body?.data?.order?.order_id || req.body?.order_id;
+  const status = req.body?.data?.payment?.payment_status || req.body?.order_status;
   await logPayment(orderId, status || "WEBHOOK", req.body);
 
   if (orderId && ["SUCCESS", "PAID", "ACTIVE"].includes(String(status).toUpperCase())) {
