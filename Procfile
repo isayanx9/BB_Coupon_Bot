@@ -1,1 +1,1 @@
-web: python launcher.py
+web: npm start

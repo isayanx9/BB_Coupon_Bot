@@ -1,0 +1,24 @@
+{
+  "name": "flashxbbbot",
+  "version": "1.0.0",
+  "description": "Production Telegram coupon bot for FlashX BigBasket coupons.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "migrate": "node src/migrate.js",
+    "check": "node --check src/index.js && node --check src/bot.js && node --check src/repositories.js && node --check src/services/cashfree.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1",
+    "pino": "^9.6.0"
+  }
+}
