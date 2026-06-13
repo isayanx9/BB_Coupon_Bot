@@ -248,7 +248,7 @@ async def start_command(message: Message):
         created = create_referral(
             int(parts[1]),
             message.from_user.id,
-            int(get_bot_setting("referral_reward", "5")),
+            1,
         )
         if created:
             await referral_success_effect(message)
@@ -458,7 +458,7 @@ async def deliver_paid_order(order_id, bot: Bot):
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
-    reward_referral_if_needed(order.user_id, int(get_bot_setting("referral_reward", "5")))
+    reward_referral_if_needed(order.user_id, 1)
     delivery_intro = await bot.send_message(
         chat_id=order.user_id,
         text="📦 <b>Finalizing delivery</b>\n\n<blockquote>Cutie is unlocking your coupon now...</blockquote>",
@@ -579,7 +579,7 @@ async def wallet(message: Message):
     await message.answer(
         "💎 <b>Wallet</b>\n\n"
         f"<blockquote>Available credits: <b>Rs {balance}</b>\n"
-        "Credits can be used for refunds, referral rewards, and VIP perks.</blockquote>"
+        "Credits can be used to pay for coupon orders, refunds, referral rewards, and VIP perks.</blockquote>"
     )
 
 
@@ -592,7 +592,8 @@ async def referral(message: Message):
     await message.answer(
         "🎁 <b>Referral Program</b>\n\n"
         f"<blockquote>Your referrals: <b>{count}</b>\n"
-        f"Reward per valid referral: <b>Rs {get_bot_setting('referral_reward', '5')}</b></blockquote>\n\n"
+        "Reward per valid referral: <b>Rs 1</b>\n"
+        "1 credit = 1 Rs, and you can use it to redeem coupon orders.</blockquote>\n\n"
         "<i>Your referral link:</i>\n"
         f"<code>https://t.me/{BOT_USERNAME}?start={message.from_user.id}</code>"
     )

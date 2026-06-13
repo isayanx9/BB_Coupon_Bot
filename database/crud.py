@@ -279,7 +279,7 @@ def create_referral(referrer_id, referred_id, reward_amount=0):
         db.close()
 
 
-def reward_referral_if_needed(referred_id, default_reward=5):
+def reward_referral_if_needed(referred_id, default_reward=1):
     db = SessionLocal()
 
     try:
