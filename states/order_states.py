@@ -51,6 +51,10 @@ class WalletCreditState(StatesGroup):
     waiting_for_reason = State()
 
 
+class WalletTopUpState(StatesGroup):
+    waiting_for_amount = State()
+
+
 class FlashSaleState(StatesGroup):
     waiting_for_coupon_name = State()
     waiting_for_title = State()

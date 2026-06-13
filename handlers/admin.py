@@ -36,6 +36,7 @@ from database.crud import (
     get_total_revenue,
     get_total_users,
     get_stock_alert_user_ids,
+    get_wallet_balance,
     is_user_banned,
     set_bot_setting,
     unban_user,
@@ -858,6 +859,8 @@ async def retry_delivery(message: Message, bot: Bot):
     if not await admin_only(message):
         return
 
+    from database.crud import update_delivery_status, update_order_status
+
     order_id = message.text.replace("/retry_delivery ", "").strip()
     order = get_order_by_id(order_id)
 
@@ -865,13 +868,28 @@ async def retry_delivery(message: Message, bot: Bot):
         await message.answer("⚠️ <b>Order not found.</b>")
         return
 
+    if order.coupon_name == "WALLET_TOPUP":
+        add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
+        update_order_status(order_id, "SUCCESS")
+        update_delivery_status(order_id, "DELIVERED")
+        balance = get_wallet_balance(order.user_id)
+
+        await bot.send_message(
+            order.user_id,
+            "💎 <b>Wallet Top Up Successful</b>\n\n"
+            f"<blockquote>Order: <code>{order_id}</code>\n"
+            f"Added: <b>Rs {order.amount}</b>\n"
+            f"Wallet Balance: <b>Rs {balance}</b></blockquote>",
+        )
+        await message.answer("✅ <b>Retry wallet top up complete.</b>")
+        audit_admin_action(message.from_user.id, "retry_wallet_topup", order_id)
+        return
+
     coupon_code = deliver_coupon(order.coupon_name)
 
     if not coupon_code:
         await message.answer("⚠️ <b>No unsold stock available for retry.</b>")
         return
-
-    from database.crud import update_delivery_status, update_order_status
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")

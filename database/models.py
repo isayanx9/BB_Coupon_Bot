@@ -194,6 +194,16 @@ class Order(Base):
         String(255)
     )
 
+    wallet_used = Column(
+        Integer,
+        default=0
+    )
+
+    payable_amount = Column(
+        Integer,
+        default=0
+    )
+
     # NEW FIELD
     payment_session_id = Column(
         String(500),

@@ -15,12 +15,14 @@ from config import (
     PUBLIC_BASE_URL,
 )
 from database.crud import (
+    add_wallet_credit,
     get_analytics_snapshot,
     get_coupon_summary,
     get_open_tickets,
     get_order_by_id,
     get_payment_session,
     get_recent_audit_logs,
+    get_wallet_balance,
     update_delivery_status,
     update_order_status,
 )
@@ -355,6 +357,29 @@ async def cashfree_webhook(request: Request):
             if order:
                 if order.delivery_status == "DELIVERED":
                     return JSONResponse({"success": True, "already_delivered": True})
+
+                if order.coupon_name == "WALLET_TOPUP":
+                    add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
+                    update_delivery_status(order_id, "DELIVERED")
+
+                    bot = Bot(
+                        token=BOT_TOKEN,
+                        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+                    )
+
+                    balance = get_wallet_balance(order.user_id)
+                    await bot.send_message(
+                        chat_id=order.user_id,
+                        text=(
+                            "💎 <b>Wallet Top Up Successful</b>\n\n"
+                            f"<blockquote>🆔 Order: <code>{order.order_id}</code>\n"
+                            f"💰 Added: <b>Rs {order.amount}</b>\n"
+                            f"💳 Wallet Balance: <b>Rs {balance}</b></blockquote>\n\n"
+                            "<i>You can now use this balance to buy coupons.</i>"
+                        ),
+                    )
+                    await bot.session.close()
+                    return JSONResponse({"success": True, "wallet_topup": True})
 
                 coupon_code = deliver_coupon(order.coupon_name)
 

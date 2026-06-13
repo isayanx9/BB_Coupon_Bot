@@ -843,11 +843,29 @@ def delete_coupon_group(coupon_name, only_unsold=True):
 def create_order(
     user_id,
     coupon_name,
-    amount
+    amount,
+    use_wallet=True
 ):
     db = SessionLocal()
 
     try:
+
+        wallet_used = 0
+        payable_amount = amount
+
+        if use_wallet:
+            balance = get_wallet_balance(user_id)
+            wallet_used = min(balance, amount)
+            payable_amount = amount - wallet_used
+
+            if wallet_used > 0:
+                db.add(
+                    WalletTransaction(
+                        user_id=user_id,
+                        amount=-wallet_used,
+                        reason="Wallet used for coupon purchase",
+                    )
+                )
 
         order_id = "BB" + uuid.uuid4().hex[:12].upper()
 
@@ -856,6 +874,8 @@ def create_order(
             user_id=user_id,
             coupon_name=coupon_name,
             amount=amount,
+            wallet_used=wallet_used,
+            payable_amount=payable_amount,
             payment_status="PENDING",
             delivery_status="NOT_DELIVERED"
         )

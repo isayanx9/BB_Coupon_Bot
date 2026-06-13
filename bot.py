@@ -17,6 +17,7 @@ from config import (
     require_env,
 )
 from database.crud import (
+    add_wallet_credit,
     create_order,
     create_referral,
     create_support_ticket,
@@ -44,7 +45,7 @@ from keyboards.shop import coupon_list_keyboard, payment_keyboard
 from keyboards.user import admin_main_menu, join_keyboard, terms_keyboard, user_main_menu
 from services.ai_assistant import get_ai_answer
 from services.coupon_service import deliver_coupon
-from states.order_states import AIAssist, SupportTicketState
+from states.order_states import AIAssist, SupportTicketState, WalletTopUpState
 from texts import (
     BOT_USERNAME,
     BTN_ACCESS_LOG,
@@ -342,7 +343,7 @@ async def buy_coupons(message: Message):
 
 
 @dp.callback_query(F.data.startswith("buy_type_"))
-async def buy_coupon_type(callback: CallbackQuery):
+async def buy_coupon_type(callback: CallbackQuery, bot: Bot):
     if is_user_banned(callback.from_user.id):
         await callback.answer("Access blocked.", show_alert=True)
         return
@@ -364,7 +365,7 @@ async def buy_coupon_type(callback: CallbackQuery):
         await callback.answer()
         return
 
-    order_id = create_order(callback.from_user.id, coupon.coupon_name, coupon.selling_price)
+    order_id = create_order(callback.from_user.id, coupon.coupon_name, coupon.selling_price, use_wallet=True)
 
     if not order_id:
         await callback.message.answer(
@@ -374,12 +375,31 @@ async def buy_coupon_type(callback: CallbackQuery):
         await callback.answer()
         return
 
+    order = get_order_by_id(order_id)
+    payable_amount = order.payable_amount if order else coupon.selling_price
+    wallet_used = order.wallet_used if order else 0
+
+    if payable_amount == 0:
+        delivered, detail = await finalize_paid_order(order_id, bot)
+        if not delivered:
+            await callback.message.answer(
+                "⚠️ <b>Wallet purchase needs admin support.</b>\n\n"
+                f"<blockquote>{escape(detail)}</blockquote>"
+            )
+        else:
+            await callback.message.answer(
+                "✅ <b>Coupon paid from wallet credits.</b>"
+            )
+        await callback.answer()
+        return
+
     await callback.message.answer(
         "✨ <b>Order Created</b>\n\n"
         f"<blockquote>🆔 Order ID: <code>{order_id}</code>\n"
         f"🎟 Coupon: <code>{escape(coupon.coupon_name)}</code>\n"
         f"💰 Amount: <b>Rs {coupon.selling_price}</b>\n"
-        "⏳ Status: <i>Pending Payment</i></blockquote>",
+        f"💎 Wallet Used: <b>Rs {wallet_used}</b>\n"
+        f"⏳ Pay Now: <i>Rs {payable_amount}</i></blockquote>",
         reply_markup=payment_keyboard(order_id),
     )
     await callback.answer()
@@ -400,7 +420,7 @@ async def pay_order(callback: CallbackQuery):
 
     data = create_cashfree_payment_link(
         order_id=order_id,
-        amount=order.amount,
+        amount=order.payable_amount or order.amount,
         customer_id=callback.from_user.id,
     )
 
@@ -435,14 +455,15 @@ async def pay_order(callback: CallbackQuery):
     await callback.message.answer(
         "💳 <b>Payment Ready</b>\n\n"
         f"<blockquote>🆔 Order: <code>{order_id}</code>\n"
-        f"💰 Amount: <b>Rs {order.amount}</b></blockquote>\n\n"
+        f"💰 Amount Due: <b>Rs {order.payable_amount or order.amount}</b>\n"
+        f"💎 Wallet Used: <b>Rs {order.wallet_used or 0}</b></blockquote>\n\n"
         "<i>Cutie prepared your secure checkout.</i>",
         reply_markup=markup,
     )
     await callback.answer()
 
 
-async def deliver_paid_order(order_id, bot: Bot):
+async def finalize_paid_order(order_id, bot: Bot):
     order = get_order_by_id(order_id)
 
     if not order:
@@ -450,6 +471,24 @@ async def deliver_paid_order(order_id, bot: Bot):
 
     if order.delivery_status == "DELIVERED":
         return True, "Already delivered."
+
+    if order.coupon_name == "WALLET_TOPUP":
+        add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
+        update_order_status(order_id, "SUCCESS")
+        update_delivery_status(order_id, "DELIVERED")
+
+        balance = get_wallet_balance(order.user_id)
+        await bot.send_message(
+            chat_id=order.user_id,
+            text=(
+                "💎 <b>Wallet Top Up Successful</b>\n\n"
+                f"<blockquote>🆔 Order: <code>{order.order_id}</code>\n"
+                f"💰 Added: <b>Rs {order.amount}</b>\n"
+                f"💳 Wallet Balance: <b>Rs {balance}</b></blockquote>\n\n"
+                "<i>You can now use this balance to buy coupons.</i>"
+            ),
+        )
+        return True, "Wallet topped up"
 
     coupon_code = deliver_coupon(order.coupon_name)
 
@@ -489,9 +528,9 @@ async def recheck_payment(callback: CallbackQuery, bot: Bot):
     ).upper()
 
     if status in {"PAID", "SUCCESS", "ACTIVE"}:
-        delivered, detail = await deliver_paid_order(order_id, bot)
+        delivered, detail = await finalize_paid_order(order_id, bot)
         if delivered:
-            await callback.message.answer("✅ <b>Payment verified and coupon delivered.</b>")
+            await callback.message.answer("✅ <b>Payment verified.</b>")
         else:
             await callback.message.answer(
                 "⚠️ <b>Payment verified, delivery needs admin.</b>\n\n"
@@ -576,11 +615,101 @@ async def wallet(message: Message):
         return
 
     balance = get_wallet_balance(message.from_user.id)
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Top Up Wallet", callback_data="wallet_topup")],
+        ]
+    )
     await message.answer(
         "💎 <b>Wallet</b>\n\n"
         f"<blockquote>Available credits: <b>Rs {balance}</b>\n"
-        "Credits can be used to pay for coupon orders, refunds, referral rewards, and VIP perks.</blockquote>"
+        "Credits can be used to pay for coupon orders, refunds, referral rewards, and VIP perks.</blockquote>\n\n"
+        "<i>Top up with real money, then use the wallet on coupon purchases.</i>",
+        reply_markup=markup,
     )
+
+
+@dp.callback_query(F.data == "wallet_topup")
+async def wallet_topup_start(callback: CallbackQuery, state: FSMContext):
+    if is_user_banned(callback.from_user.id):
+        await callback.answer("Access blocked.", show_alert=True)
+        return
+
+    await state.set_state(WalletTopUpState.waiting_for_amount)
+    await callback.message.answer(
+        "💳 <b>Wallet Top Up</b>\n\n"
+        "<blockquote>Send the amount you want to add to your wallet.</blockquote>\n\n"
+        "<i>Example: 100</i>"
+    )
+    await callback.answer()
+
+
+@dp.message(WalletTopUpState.waiting_for_amount)
+async def wallet_topup_amount(message: Message, state: FSMContext, bot: Bot):
+    if await reject_if_banned(message):
+        return
+
+    try:
+        amount = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Send a numeric amount only, example: <code>100</code>")
+        return
+
+    if amount < 10:
+        await message.answer("Minimum wallet top up is <b>Rs 10</b>.")
+        return
+
+    order_id = create_order(
+        message.from_user.id,
+        "WALLET_TOPUP",
+        amount,
+        use_wallet=False,
+    )
+
+    if not order_id:
+        await message.answer(
+            "💔 <b>Could not create wallet top up order.</b>\n\n"
+            "<blockquote>Please try again.</blockquote>"
+        )
+        await state.clear()
+        return
+
+    order = get_order_by_id(order_id)
+    data = create_cashfree_payment_link(
+        order_id=order_id,
+        amount=amount,
+        customer_id=message.from_user.id,
+    )
+
+    if "payment_session_id" not in data:
+        await message.answer(
+            "💔 <b>Wallet top up payment failed.</b>\n\n"
+            f"<blockquote>{format_payment_error(data)}</blockquote>"
+        )
+        await state.clear()
+        return
+
+    save_payment_session(order_id, data["payment_session_id"])
+    payment_url = (
+        data.get("payment_link")
+        or data.get("payment_url")
+        or f"{PUBLIC_BASE_URL}/pay/{order_id}"
+    )
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Pay Wallet Top Up", url=payment_url)],
+            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}")],
+        ]
+    )
+
+    await message.answer(
+        "💎 <b>Wallet Top Up Ready</b>\n\n"
+        f"<blockquote>🆔 Order: <code>{order_id}</code>\n"
+        f"💰 Amount: <b>Rs {order.amount}</b></blockquote>\n\n"
+        "<i>Once payment is confirmed, your wallet balance will increase.</i>",
+        reply_markup=markup,
+    )
+    await state.clear()
 
 
 @dp.message(F.text == BTN_REFERRAL)
