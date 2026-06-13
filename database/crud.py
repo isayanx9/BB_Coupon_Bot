@@ -246,6 +246,68 @@ def get_wallet_balance(user_id):
         db.close()
 
 
+def get_wallet_transactions(user_id, limit=10):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(WalletTransaction)
+            .filter(WalletTransaction.user_id == user_id)
+            .order_by(WalletTransaction.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def refund_order_wallet_if_needed(order_id, reason="Wallet refund"):
+    db = SessionLocal()
+
+    try:
+        order = (
+            db.query(Order)
+            .filter(Order.order_id == order_id)
+            .first()
+        )
+
+        if not order or not order.wallet_used:
+            return False
+
+        if order.payment_status == "SUCCESS" or order.delivery_status == "DELIVERED":
+            return False
+
+        existing = (
+            db.query(WalletTransaction)
+            .filter(
+                WalletTransaction.user_id == order.user_id,
+                WalletTransaction.reason == f"{reason} for {order.order_id}",
+            )
+            .first()
+        )
+
+        if existing:
+            return False
+
+        db.add(
+            WalletTransaction(
+                user_id=order.user_id,
+                amount=order.wallet_used,
+                reason=f"{reason} for {order.order_id}",
+            )
+        )
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
 def create_referral(referrer_id, referred_id, reward_amount=0):
     if str(referrer_id) == str(referred_id):
         return False

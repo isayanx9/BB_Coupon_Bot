@@ -35,7 +35,7 @@ from database.crud import (
     get_total_orders,
     get_total_revenue,
     get_total_users,
-    get_stock_alert_user_ids,
+    get_coupon_stock,
     get_wallet_balance,
     is_user_banned,
     set_bot_setting,
@@ -43,6 +43,7 @@ from database.crud import (
     update_coupon_price,
 )
 from services.coupon_service import deliver_coupon
+from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 from keyboards.admin import developer_menu
 from keyboards.user import admin_main_menu, user_main_menu
 from states.order_states import (
@@ -126,6 +127,67 @@ async def low_stock_effect(message: Message, count: int):
             pass
 
 
+async def admin_boot_effect(message: Message):
+    frame = await message.answer(
+        "🛠 <b>Control Center booting</b>\n\n<blockquote>Loading hidden admin layers...</blockquote>"
+    )
+
+    frames = [
+        "🛠 <b>Control Center booting</b>\n\n<blockquote>🔒 Verifying admin rights...\n████░░░░░░ 25%</blockquote>",
+        "🛠 <b>Control Center booting</b>\n\n<blockquote>📡 Syncing dashboards...\n██████░░░░ 50%</blockquote>",
+        "🛠 <b>Control Center booting</b>\n\n<blockquote>💠 Loading inventory tools...\n████████░░ 75%</blockquote>",
+        "✅ <b>Control Center ready</b>\n\n<blockquote>⚡ Admin mode active\n██████████ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def admin_sync_effect(message: Message, title="Admin sync"):
+    frame = await message.answer(
+        f"⚡ <b>{title}</b>\n\n<blockquote>Connecting control modules...</blockquote>"
+    )
+
+    frames = [
+        f"⚡ <b>{title}</b>\n\n<blockquote>▰▱▱▱▱▱▱▱▱▱ 10%</blockquote>",
+        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▱▱▱▱▱▱▱ 30%</blockquote>",
+        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▱▱▱▱▱ 50%</blockquote>",
+        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▰▰▱▱▱ 70%</blockquote>",
+        f"✅ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▰▰▰▰▰ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.12)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def inventory_scan_effect(message: Message):
+    frame = await message.answer(
+        "📦 <b>Inventory scan</b>\n\n<blockquote>Reading coupon vault...</blockquote>"
+    )
+
+    frames = [
+        "📦 <b>Inventory scan</b>\n\n<blockquote>🔎 Loading groups...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
+        "📦 <b>Inventory scan</b>\n\n<blockquote>🧭 Measuring stock pressure...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
+        "📦 <b>Inventory scan</b>\n\n<blockquote>⚠️ Checking low stock rows...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
+        "✨ <b>Inventory ready</b>\n\n<blockquote>All counts loaded</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
 def is_admin(message: Message):
     return str(message.from_user.id) == str(ADMIN_ID)
 
@@ -143,6 +205,7 @@ async def developer_panel(message: Message):
     if not await admin_only(message):
         return
 
+    await admin_boot_effect(message)
     await message.answer(
         "🛠 <b>FLASH-X Control Center</b>\n\n"
         "<blockquote>Cutie can manage coupons, broadcasts, users, bans, settings, payments, and orders.</blockquote>",
@@ -201,6 +264,7 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
 
     added = 0
     failed = 0
+    added_coupon_names = set()
 
     for line in message.text.splitlines():
         if not line.strip():
@@ -218,6 +282,7 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
 
             if success:
                 added += 1
+                added_coupon_names.add(name.strip())
             else:
                 failed += 1
         except Exception:
@@ -232,16 +297,15 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
 
     if added:
         sent = 0
-        for user_id in get_stock_alert_user_ids():
-            try:
-                await bot.send_message(
-                    user_id,
-                    "🔔 <b>Fresh coupon stock added.</b>\n\n"
-                    "<blockquote>Open Deal Vault before it sells out.</blockquote>",
-                )
-                sent += 1
-            except Exception:
-                pass
+        for coupon_name in sorted(added_coupon_names):
+            stock_count = get_coupon_stock(coupon_name)
+            notified = await notify_stock_alerts(
+                bot,
+                coupon_name,
+                stock_count,
+                reason="restock",
+            )
+            sent += notified
 
         await message.answer(f"🔔 Restock alerts sent: <b>{sent}</b>")
 
@@ -253,6 +317,7 @@ async def inventory(message: Message):
     if not is_admin(message):
         return
 
+    await inventory_scan_effect(message)
     summary = get_coupon_summary()
     low_stock = [item for item in summary if int(item["available"]) <= 5]
     if low_stock:
@@ -293,6 +358,7 @@ async def analytics(message: Message):
     if not is_admin(message):
         return
 
+    await admin_sync_effect(message, "Analytics sync")
     data = get_analytics_snapshot()
     await message.answer(
         "📈 <b>Analytics</b>\n\n"
@@ -409,6 +475,7 @@ async def settings(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
+    await admin_sync_effect(message, "Settings sync")
     settings_list = get_all_bot_settings()
     settings_text = "\n".join(
         f"<code>{escape(setting.key)}</code> = <b>{escape(setting.value)}</b>"
@@ -608,6 +675,7 @@ async def tickets(message: Message):
     if not is_admin(message):
         return
 
+    await admin_sync_effect(message, "Ticket board sync")
     tickets_list = get_open_tickets()
     lines = []
 
@@ -885,7 +953,7 @@ async def retry_delivery(message: Message, bot: Bot):
         audit_admin_action(message.from_user.id, "retry_wallet_topup", order_id)
         return
 
-    coupon_code = deliver_coupon(order.coupon_name)
+    coupon_code, remaining_stock = deliver_coupon(order.coupon_name)
 
     if not coupon_code:
         await message.answer("⚠️ <b>No unsold stock available for retry.</b>")
@@ -893,6 +961,14 @@ async def retry_delivery(message: Message, bot: Bot):
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
+
+    if should_send_stock_alert(remaining_stock):
+        await notify_stock_alerts(
+            bot,
+            order.coupon_name,
+            remaining_stock,
+            reason="low_stock" if remaining_stock > 0 else "sold_out",
+        )
 
     await bot.send_message(
         order.user_id,

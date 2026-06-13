@@ -29,7 +29,9 @@ from database.crud import (
     get_referral_count,
     get_user_orders,
     get_wallet_balance,
+    get_wallet_transactions,
     is_user_banned,
+    refund_order_wallet_if_needed,
     reward_referral_if_needed,
     save_payment_session,
     subscribe_stock_alert,
@@ -45,6 +47,7 @@ from keyboards.shop import coupon_list_keyboard, payment_keyboard
 from keyboards.user import admin_main_menu, join_keyboard, terms_keyboard, user_main_menu
 from services.ai_assistant import get_ai_answer
 from services.coupon_service import deliver_coupon
+from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 from states.order_states import AIAssist, SupportTicketState, WalletTopUpState
 from texts import (
     BOT_USERNAME,
@@ -52,6 +55,7 @@ from texts import (
     BTN_AI_ASSIST,
     BTN_DEAL_VAULT,
     BTN_PROFILE,
+    BTN_RAISE_TICKET,
     BTN_REFERRAL,
     BTN_STOCK_ALERTS,
     BTN_SUPPORT,
@@ -221,6 +225,106 @@ async def order_delivery_effect(message: Message):
             pass
 
 
+async def premium_boot_effect(message: Message):
+    frame = await message.answer(
+        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>Preparing premium mode...</blockquote>"
+    )
+
+    frames = [
+        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>🛡️ Security check 1/4\n██████░░░░ 25%</blockquote>",
+        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>📡 Syncing services 2/4\n████████░░ 50%</blockquote>",
+        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>💎 Loading premium modules 3/4\n██████████ 75%</blockquote>",
+        "✅ <b>FlashX Ready</b>\n\n<blockquote>✨ Premium interface active\n██████████ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def vault_sync_effect(message: Message):
+    frame = await message.answer(
+        "💠 <b>Opening vault</b>\n\n<blockquote>Scanning premium inventory...</blockquote>"
+    )
+
+    frames = [
+        "💠 <b>Opening vault</b>\n\n<blockquote>🔎 Reading catalog...\n▰▱▱▱▱▱▱▱▱▱ 20%</blockquote>",
+        "💠 <b>Opening vault</b>\n\n<blockquote>🧭 Matching coupon groups...\n▰▰▰▱▱▱▱▱▱▱ 40%</blockquote>",
+        "💠 <b>Opening vault</b>\n\n<blockquote>⚡ Unlocking live stock...\n▰▰▰▰▰▱▱▱▱▱ 60%</blockquote>",
+        "✨ <b>Vault ready</b>\n\n<blockquote>📦 Premium coupons available\n▰▰▰▰▰▰▰▰▰▰ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def wallet_charge_effect(message: Message):
+    frame = await message.answer(
+        "💎 <b>Wallet syncing</b>\n\n<blockquote>Charging your balance...</blockquote>"
+    )
+
+    frames = [
+        "💎 <b>Wallet syncing</b>\n\n<blockquote>⚡ Collecting credits...\n▓▓░░░░░░░░ 20%</blockquote>",
+        "💎 <b>Wallet syncing</b>\n\n<blockquote>🟡 Routing funds...\n▓▓▓▓░░░░░░ 40%</blockquote>",
+        "💎 <b>Wallet syncing</b>\n\n<blockquote>🔵 Updating balance...\n▓▓▓▓▓▓░░░░ 60%</blockquote>",
+        "✅ <b>Wallet ready</b>\n\n<blockquote>💠 Credits confirmed\n▓▓▓▓▓▓▓▓▓▓ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def referral_orbit_effect(message: Message):
+    frame = await message.answer(
+        "🎁 <b>Referral orbit</b>\n\n<blockquote>Tracking invited user...</blockquote>"
+    )
+
+    frames = [
+        "🎁 <b>Referral orbit</b>\n\n<blockquote>⚡ Checking join state...\n●○○</blockquote>",
+        "🎁 <b>Referral orbit</b>\n\n<blockquote>🔎 Validating start link...\n●●○</blockquote>",
+        "🎁 <b>Referral orbit</b>\n\n<blockquote>💰 Reward locking...\n●●●</blockquote>",
+        "✅ <b>Referral complete</b>\n\n<blockquote>+1 credit added</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def user_ai_effect(message: Message):
+    frame = await message.answer(
+        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>Loading bot knowledge...</blockquote>"
+    )
+
+    frames = [
+        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●○○\nReading bot rules...</blockquote>",
+        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●●○\nChecking wallet and orders...</blockquote>",
+        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●●●\nGenerating answer...</blockquote>",
+        "✨ <b>FlashX AI ready</b>\n\n<blockquote>Smart support online</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
 async def reject_if_banned(message: Message):
     track_user(message.from_user.id, message.from_user.username)
 
@@ -257,6 +361,7 @@ async def start_command(message: Message):
     if await reject_if_banned(message):
         return
 
+    await premium_boot_effect(message)
     await message.answer(WELCOME_TEXT, reply_markup=join_keyboard())
 
 
@@ -315,6 +420,7 @@ async def buy_coupons(message: Message):
     if await reject_if_banned(message):
         return
 
+    await vault_sync_effect(message)
     await coupon_reveal_effect(message)
     options = get_coupon_type_options()
 
@@ -425,10 +531,13 @@ async def pay_order(callback: CallbackQuery):
     )
 
     if "payment_session_id" not in data:
+        refunded = refund_order_wallet_if_needed(order_id, "Payment setup refund")
+        update_order_status(order_id, "FAILED")
         await callback.message.answer(
             "💔 <b>Payment Error</b>\n\n"
             f"<blockquote>{format_payment_error(data)}</blockquote>\n\n"
             "<i>Admin should check Cashfree credentials, PUBLIC_BASE_URL, and webhook URL.</i>"
+            + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
         )
         await callback.answer()
         return
@@ -490,14 +599,24 @@ async def finalize_paid_order(order_id, bot: Bot):
         )
         return True, "Wallet topped up"
 
-    coupon_code = deliver_coupon(order.coupon_name)
+    coupon_code, remaining_stock = deliver_coupon(order.coupon_name)
 
     if not coupon_code:
+        refund_order_wallet_if_needed(order_id, "Delivery refund")
         return False, "No unsold coupon stock available for this order."
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
     reward_referral_if_needed(order.user_id, 1)
+
+    if should_send_stock_alert(remaining_stock):
+        await notify_stock_alerts(
+            bot,
+            order.coupon_name,
+            remaining_stock,
+            reason="low_stock" if remaining_stock > 0 else "sold_out",
+        )
+
     delivery_intro = await bot.send_message(
         chat_id=order.user_id,
         text="📦 <b>Finalizing delivery</b>\n\n<blockquote>Cutie is unlocking your coupon now...</blockquote>",
@@ -549,9 +668,25 @@ async def recheck_payment(callback: CallbackQuery, bot: Bot):
 async def cancel_order(callback: CallbackQuery):
     order_id = callback.data.replace("cancel_", "")
     await flash_effect(callback, FLASH_CANCEL_TEXT)
+    order = get_order_by_id(order_id)
+
+    if order and (
+        order.payment_status == "SUCCESS"
+        or order.delivery_status == "DELIVERED"
+    ):
+        await callback.message.answer(
+            "⚠️ <b>This order is already completed.</b>\n\n"
+            f"Order ID: <code>{order_id}</code>"
+        )
+        await callback.answer()
+        return
+
+    refunded = refund_order_wallet_if_needed(order_id, "Order cancel refund")
     update_order_status(order_id, "CANCELLED")
     await callback.message.answer(
-        f"🚫 <b>Order cancelled.</b>\n\nOrder ID: <code>{order_id}</code>"
+        f"🚫 <b>Order cancelled.</b>\n\n"
+        f"Order ID: <code>{order_id}</code>"
+        + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
     )
     await callback.answer()
 
@@ -614,19 +749,58 @@ async def wallet(message: Message):
     if await reject_if_banned(message):
         return
 
+    await wallet_charge_effect(message)
     balance = get_wallet_balance(message.from_user.id)
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Top Up Wallet", callback_data="wallet_topup")],
+            [InlineKeyboardButton(text="Top Up Wallet", callback_data="wallet_topup")],
+            [InlineKeyboardButton(text="Wallet History", callback_data="wallet_history")],
         ]
     )
     await message.answer(
-        "💎 <b>Wallet</b>\n\n"
-        f"<blockquote>Available credits: <b>Rs {balance}</b>\n"
-        "Credits can be used to pay for coupon orders, refunds, referral rewards, and VIP perks.</blockquote>\n\n"
-        "<i>Top up with real money, then use the wallet on coupon purchases.</i>",
+        "<b>FLASHX ATM</b>\n\n"
+        f"<blockquote>Card Status: <b>ACTIVE</b>\n"
+        f"Available Credits: <b>Rs {balance}</b>\n"
+        f"Cash-out Value: <b>{balance} credits</b>\n"
+        "Wallet credits can pay for coupons, refunds, referral rewards, and premium perks.</blockquote>\n\n"
+        "<i>Top up any positive amount. No minimum balance required.</i>",
         reply_markup=markup,
     )
+
+
+@dp.callback_query(F.data == "wallet_history")
+async def wallet_history(callback: CallbackQuery):
+    if is_user_banned(callback.from_user.id):
+        await callback.answer("Access blocked.", show_alert=True)
+        return
+
+    balance = get_wallet_balance(callback.from_user.id)
+    transactions = get_wallet_transactions(callback.from_user.id, limit=10)
+
+    if not transactions:
+        await callback.message.answer(
+            "📜 <b>Wallet History</b>\n\n"
+            f"<blockquote>Balance: <b>Rs {balance}</b>\n"
+            "No wallet transactions yet.</blockquote>"
+        )
+        await callback.answer()
+        return
+
+    lines = []
+    for tx in transactions:
+        sign = "+" if tx.amount >= 0 else "-"
+        amount = abs(tx.amount)
+        lines.append(
+            f"{sign} <b>Rs {amount}</b> • {escape(tx.reason or 'Wallet update')}"
+        )
+
+    await callback.message.answer(
+        "📜 <b>Wallet History</b>\n\n"
+        f"<blockquote>Balance: <b>Rs {balance}</b>\n\n"
+        f"{chr(10).join(lines)}</blockquote>\n\n"
+        "<i>Top ups, referral rewards, and coupon spends appear here.</i>"
+    )
+    await callback.answer()
 
 
 @dp.callback_query(F.data == "wallet_topup")
@@ -637,9 +811,10 @@ async def wallet_topup_start(callback: CallbackQuery, state: FSMContext):
 
     await state.set_state(WalletTopUpState.waiting_for_amount)
     await callback.message.answer(
-        "💳 <b>Wallet Top Up</b>\n\n"
-        "<blockquote>Send the amount you want to add to your wallet.</blockquote>\n\n"
-        "<i>Example: 100</i>"
+        "<b>Wallet Top Up</b>\n\n"
+        "<blockquote>Send any positive amount you want to add to your wallet.\n"
+        "Example: <code>1</code> or <code>250</code></blockquote>\n\n"
+        "<i>No minimum balance. The wallet accepts small and large top ups.</i>"
     )
     await callback.answer()
 
@@ -655,8 +830,8 @@ async def wallet_topup_amount(message: Message, state: FSMContext, bot: Bot):
         await message.answer("Send a numeric amount only, example: <code>100</code>")
         return
 
-    if amount < 10:
-        await message.answer("Minimum wallet top up is <b>Rs 10</b>.")
+    if amount <= 0:
+        await message.answer("Top up amount must be more than <b>0</b>.")
         return
 
     order_id = create_order(
@@ -682,6 +857,7 @@ async def wallet_topup_amount(message: Message, state: FSMContext, bot: Bot):
     )
 
     if "payment_session_id" not in data:
+        update_order_status(order_id, "FAILED")
         await message.answer(
             "💔 <b>Wallet top up payment failed.</b>\n\n"
             f"<blockquote>{format_payment_error(data)}</blockquote>"
@@ -717,6 +893,7 @@ async def referral(message: Message):
     if await reject_if_banned(message):
         return
 
+    await referral_orbit_effect(message)
     count = get_referral_count(message.from_user.id)
     await message.answer(
         "🎁 <b>Referral Program</b>\n\n"
@@ -729,6 +906,7 @@ async def referral(message: Message):
 
 
 @dp.message(F.text == BTN_SUPPORT)
+@dp.message(F.text == BTN_RAISE_TICKET)
 async def support(message: Message, state: FSMContext):
     if await reject_if_banned(message):
         return
@@ -808,6 +986,7 @@ async def ai_assist_start(message: Message, state: FSMContext):
     if await reject_if_banned(message):
         return
 
+    await user_ai_effect(message)
     await state.set_state(AIAssist.waiting_for_question)
     await message.answer(
         "💖 <b>Cutie AI</b>\n\n"

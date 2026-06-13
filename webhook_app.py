@@ -28,6 +28,7 @@ from database.crud import (
 )
 import database.db as database_db
 from services.coupon_service import deliver_coupon
+from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 
 app = FastAPI()
 
@@ -381,7 +382,7 @@ async def cashfree_webhook(request: Request):
                     await bot.session.close()
                     return JSONResponse({"success": True, "wallet_topup": True})
 
-                coupon_code = deliver_coupon(order.coupon_name)
+                coupon_code, remaining_stock = deliver_coupon(order.coupon_name)
 
                 if coupon_code:
                     update_delivery_status(order_id, "DELIVERED")
@@ -390,6 +391,14 @@ async def cashfree_webhook(request: Request):
                         token=BOT_TOKEN,
                         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
                     )
+
+                    if should_send_stock_alert(remaining_stock):
+                        await notify_stock_alerts(
+                            bot,
+                            order.coupon_name,
+                            remaining_stock,
+                            reason="low_stock" if remaining_stock > 0 else "sold_out",
+                        )
 
                     await bot.send_message(
                         chat_id=order.user_id,

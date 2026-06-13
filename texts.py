@@ -16,6 +16,7 @@ BTN_PROFILE = "⚙️ Profile"
 BTN_WALLET = "💎 Wallet"
 BTN_REFERRAL = "🎁 Referral"
 BTN_SUPPORT = "📢 Support"
+BTN_RAISE_TICKET = "🎫 Raise Ticket"
 BTN_STOCK_ALERTS = "🔔 Stock Alerts"
 BTN_CONTROL_CENTER = "🛠 Control Center"
 
