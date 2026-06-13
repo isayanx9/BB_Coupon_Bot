@@ -119,6 +119,66 @@ async def energy_collecting_effect(callback: CallbackQuery):
         await asyncio.sleep(0.16)
 
 
+async def coupon_reveal_effect(message: Message):
+    reveal = await message.answer(
+        "📦 <b>Opening Deal Vault</b>\n\n"
+        "<blockquote>Scanning fresh deals...</blockquote>"
+    )
+
+    frames = [
+        "📦 <b>Opening Deal Vault</b>\n\n<blockquote>Scan layer 1/3\n░░░░░░░░░░</blockquote>",
+        "📦 <b>Opening Deal Vault</b>\n\n<blockquote>Scan layer 2/3\n████░░░░░░</blockquote>",
+        "🔥 <b>Coupons are loading</b>\n\n<blockquote>Scan layer 3/3\n███████░░░</blockquote>",
+        "💎 <b>Deal Vault unlocked</b>\n\n<blockquote>Fresh coupon stock is ready.</blockquote>",
+    ]
+
+    for frame in frames:
+        await asyncio.sleep(0.18)
+        try:
+            await reveal.edit_text(frame)
+        except Exception:
+            pass
+
+
+async def ai_typing_effect(message: Message):
+    typing = await message.answer(
+        "💬 <b>Cutie is thinking</b>\n\n<blockquote>Typing response...</blockquote>"
+    )
+
+    frames = [
+        "💬 <b>Cutie is thinking.</b>\n\n<blockquote>Typing response.</blockquote>",
+        "💬 <b>Cutie is thinking..</b>\n\n<blockquote>Typing response..</blockquote>",
+        "💬 <b>Cutie is thinking...</b>\n\n<blockquote>Typing response...</blockquote>",
+    ]
+
+    for frame in frames:
+        await asyncio.sleep(0.2)
+        try:
+            await typing.edit_text(frame)
+        except Exception:
+            pass
+
+
+async def ticket_beam_effect(message: Message):
+    beam = await message.answer(
+        "🎫 <b>Raising support ticket</b>\n\n"
+        "<blockquote>Connecting to admin...</blockquote>"
+    )
+
+    frames = [
+        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Beam charging...\n█░░░░░░░░░</blockquote>",
+        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Beam linking...\n████░░░░░░</blockquote>",
+        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Admin channel found...\n███████░░░</blockquote>",
+    ]
+
+    for frame in frames:
+        await asyncio.sleep(0.18)
+        try:
+            await beam.edit_text(frame)
+        except Exception:
+            pass
+
+
 async def reject_if_banned(message: Message):
     track_user(message.from_user.id, message.from_user.username)
 
@@ -211,6 +271,7 @@ async def buy_coupons(message: Message):
     if await reject_if_banned(message):
         return
 
+    await coupon_reveal_effect(message)
     options = get_coupon_type_options()
 
     if not options:
@@ -494,6 +555,7 @@ async def support(message: Message, state: FSMContext):
     if await reject_if_banned(message):
         return
 
+    await ticket_beam_effect(message)
     await state.set_state(SupportTicketState.waiting_for_message)
     await message.answer(
         "🎫 <b>Raise Ticket</b>\n\n"
@@ -579,6 +641,7 @@ async def ai_assist_start(message: Message, state: FSMContext):
 
 @dp.message(AIAssist.waiting_for_question)
 async def ai_assist_answer(message: Message, state: FSMContext):
+    await ai_typing_effect(message)
     answer = get_ai_answer(message.text or "")
     await message.answer(answer if "<" in answer else escape(answer))
     await state.clear()
