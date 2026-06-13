@@ -92,6 +92,19 @@ async def flash_effect(callback: CallbackQuery, text: str):
         pass
 
 
+async def payment_energy_effect(callback: CallbackQuery):
+    frames = [
+        "💳 <b>Payment Core Starting</b>\n\n<blockquote>🟡 Energy ball charging\n███░░░░░░░ 30%</blockquote>",
+        "⚡ <b>Gateway Sync</b>\n\n<blockquote>🟡 🟠 Secure route forming\n████░░░░░░ 40%</blockquote>",
+        "🔐 <b>Cashfree Shield</b>\n\n<blockquote>🟡 🟠 🔵 Order lock active\n██████░░░░ 60%</blockquote>",
+        "🚀 <b>Checkout Boost</b>\n\n<blockquote>🟡 🟠 🔵 🟣 Payment session ready\n████████░░ 80%</blockquote>",
+    ]
+
+    for frame in frames:
+        await flash_effect(callback, frame)
+        await asyncio.sleep(0.15)
+
+
 async def reject_if_banned(message: Message):
     track_user(message.from_user.id, message.from_user.username)
 
@@ -258,6 +271,7 @@ async def buy_coupon_type(callback: CallbackQuery):
 async def pay_order(callback: CallbackQuery):
     order_id = callback.data.replace("pay_", "")
     await flash_effect(callback, FLASH_PAYMENT_TEXT)
+    await payment_energy_effect(callback)
     order = get_order_by_id(order_id)
 
     if not order:
@@ -281,7 +295,17 @@ async def pay_order(callback: CallbackQuery):
         return
 
     save_payment_session(order_id, data["payment_session_id"])
-    payment_url = f"{PUBLIC_BASE_URL}/pay/{order_id}"
+    await flash_effect(
+        callback,
+        "✅ <b>Payment Link Ready</b>\n\n<blockquote>🟡 🟠 🔵 🟣 🟢 Cutie prepared secure checkout\n██████████ 100%</blockquote>",
+    )
+    payments = data.get("payments") if isinstance(data.get("payments"), dict) else {}
+    payment_url = (
+        data.get("payment_link")
+        or data.get("payment_url")
+        or payments.get("url")
+        or f"{PUBLIC_BASE_URL}/pay/{order_id}"
+    )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💳 Pay Securely", url=payment_url)],

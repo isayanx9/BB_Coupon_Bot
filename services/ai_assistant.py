@@ -14,6 +14,18 @@ after payment webhooks, review Access Log orders, contact support, and use
 Cutie AI for help. Admins can open Control Center, upload coupons in bulk,
 review inventory, broadcast messages, ban/unban users, change prices, delete
 unsold coupon stock, and edit settings like maintenance_mode.
+
+Payment flow: user selects a coupon, the bot creates an order, Cashfree creates
+a payment_session_id, the Pay Securely button opens /pay/<order_id>, Cashfree
+redirects to /payment-result/<order_id>, and webhook /webhook/cashfree marks
+SUCCESS/PAID/ACTIVE orders as paid. If payment is debited but coupon is not
+delivered, user should press I Paid, Recheck and send Order ID plus screenshot
+to support. Admin should verify PUBLIC_BASE_URL, Cashfree production/sandbox
+keys, CASHFREE_ENV, webhook URL, and coupon stock.
+
+Premium UX: the bot uses quote blocks, bold, italic, monospace order IDs,
+progress bars, payment energy effects, flash messages, wallet/referral/support
+guidance, and hidden admin controls.
 """
 
 SYSTEM_PROMPT = (
@@ -27,20 +39,22 @@ SYSTEM_PROMPT = (
 )
 
 EMOTION_KEYWORDS = {
-    "worried": ["stuck", "help", "not delivered", "missing", "waiting", "delay", "crash"],
-    "upset": ["angry", "bad", "fraud", "scam", "hate", "wrong", "failed"],
-    "excited": ["wow", "nice", "great", "love", "awesome", "fast", "premium"],
-    "confused": ["how", "where", "what", "why", "confused", "don't know", "use"],
+    "worried": ["stuck", "help", "not delivered", "missing", "waiting", "delay", "crash", "502", "gateway"],
+    "upset": ["angry", "bad", "fraud", "scam", "hate", "wrong", "failed", "not working", "money debited"],
+    "excited": ["wow", "nice", "great", "love", "awesome", "fast", "premium", "ultra", "pro"],
+    "confused": ["how", "where", "what", "why", "confused", "don't know", "use", "which", "setup"],
+    "urgent": ["urgent", "now", "quick", "immediately", "asap", "customer waiting"],
 }
 
 INTENT_KEYWORDS = {
-    "payment": ["payment", "paid", "cashfree", "money", "debited", "upi", "checkout"],
+    "payment": ["payment", "paid", "cashfree", "money", "debited", "upi", "checkout", "gateway", "webhook"],
     "coupon": ["coupon", "code", "buy", "stock", "deal", "vault", "inventory"],
     "database": ["database", "postgres", "sql", "railway", "db", "crash"],
     "admin": ["admin", "upload", "panel", "developer", "broadcast", "ban", "setting"],
     "order": ["order", "status", "delivery", "delivered", "pending", "access log"],
     "support": ["support", "contact", "issue", "problem", "bug", "fix"],
     "howto": ["how", "use", "start", "join", "verify", "terms", "menu"],
+    "premium": ["premium", "effect", "animation", "flash", "bar", "energy", "design", "ui"],
 }
 
 
@@ -78,12 +92,13 @@ def emotion_prefix(emotion):
 def answer_body(intent):
     if intent == "payment":
         return (
-            "For payment: open <b>Deal Vault</b>, select a coupon, tap "
-            "<b>Pay Now</b>, then finish Cashfree checkout. If money is debited "
-            "but delivery does not happen, send support your Order ID and "
-            "payment screenshot. Admin should also confirm <code>PUBLIC_BASE_URL</code>, "
-            "<code>CASHFREE_CLIENT_ID</code>, <code>CASHFREE_CLIENT_SECRET</code>, "
-            "and Cashfree webhook URL."
+            "Payment path: <b>Deal Vault</b> -> select coupon -> <b>Pay Now</b> "
+            "-> Cashfree checkout -> return to Telegram -> tap <b>I Paid, Recheck</b>. "
+            "If money is debited but coupon is not delivered, keep the Order ID, "
+            "UPI/payment screenshot, and exact time. Admin should verify "
+            "<code>PUBLIC_BASE_URL</code>, <code>CASHFREE_CLIENT_ID</code>, "
+            "<code>CASHFREE_CLIENT_SECRET</code>, <code>CASHFREE_ENV</code>, "
+            "webhook URL <code>/webhook/cashfree</code>, and available coupon stock."
         )
 
     if intent == "coupon":
@@ -122,6 +137,15 @@ def answer_body(intent):
             "admin can fix it faster."
         )
 
+    if intent == "premium":
+        return (
+            "Premium effects available in this bot include quote panels, bold "
+            "headings, italic guidance, monospace order IDs, flash edits, payment "
+            "progress bars, and energy-ball checkout frames. Telegram does not "
+            "let bots choose custom quote colors directly, so Cutie uses supported "
+            "HTML styling that works for all users."
+        )
+
     if intent == "howto":
         return (
             "Start with /start, join the channel and support group, press "
@@ -130,9 +154,10 @@ def answer_body(intent):
         )
 
     return (
-        "I can answer anything about BB Coupon Bot: how to use it, coupons, "
-        "orders, payments, support, admin tools, settings, bans, database, and "
-        "Railway deployment. Ask me in normal language."
+        "I can answer anything about BB Coupon Bot: setup, Deal Vault, coupon "
+        "stock, orders, payments, Cashfree, webhook, refunds, support, wallet, "
+        "referrals, admin tools, settings, bans, database, Railway deployment, "
+        "and premium UI behavior. Ask me in normal language."
     )
 
 

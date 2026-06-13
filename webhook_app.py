@@ -257,9 +257,70 @@ async def pay_page(order_id: str):
     return HTMLResponse(html)
 
 
+@app.get("/payment-result/{order_id}")
+async def payment_result(order_id: str, status: str = ""):
+    safe_status = (status or "CHECKING").upper()
+    return HTMLResponse(
+        f"""
+        <!doctype html>
+        <html>
+        <head>
+            <title>Payment Result</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{
+                    margin: 0;
+                    font-family: Arial, sans-serif;
+                    background: #020617;
+                    color: #f8fafc;
+                    min-height: 100vh;
+                    display: grid;
+                    place-items: center;
+                }}
+                main {{
+                    width: min(92vw, 560px);
+                    border: 1px solid #facc15;
+                    border-radius: 8px;
+                    padding: 28px;
+                    background: #111827;
+                    box-shadow: 0 0 40px rgba(250, 204, 21, 0.22);
+                }}
+                code {{ color: #fde047; font-weight: 700; }}
+                blockquote {{
+                    margin: 18px 0;
+                    padding: 14px;
+                    border-left: 4px solid #22c55e;
+                    background: #0f172a;
+                }}
+            </style>
+        </head>
+        <body>
+            <main>
+                <h1>⚡ Payment Status</h1>
+                <blockquote>
+                    Order: <code>{order_id}</code><br>
+                    Status: <code>{safe_status}</code>
+                </blockquote>
+                <p>Return to Telegram and tap <b>I Paid, Recheck</b>. Cutie will deliver the coupon after Cashfree confirms payment.</p>
+            </main>
+        </body>
+        </html>
+        """
+    )
+
+
+@app.get("/webhook/cashfree")
+async def cashfree_webhook_health():
+    return JSONResponse({"success": True, "provider": "cashfree", "service": "BB Coupon Bot"})
+
+
 @app.post("/webhook/cashfree")
 async def cashfree_webhook(request: Request):
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
     print("Cashfree webhook:")
     print(data)
 
@@ -276,12 +337,25 @@ async def cashfree_webhook(request: Request):
             .get("payment", {})
             .get("payment_status")
         )
+        payment_status = (
+            payment_status
+            or data.get("order_status")
+            or data.get("payment_status")
+            or data.get("status")
+            or ""
+        ).upper()
 
-        if payment_status == "SUCCESS" and order_id:
+        if not order_id:
+            return JSONResponse({"success": True, "received": True})
+
+        if payment_status in {"SUCCESS", "PAID", "ACTIVE"} and order_id:
             update_order_status(order_id, "SUCCESS")
             order = get_order_by_id(order_id)
 
             if order:
+                if order.delivery_status == "DELIVERED":
+                    return JSONResponse({"success": True, "already_delivered": True})
+
                 coupon_code = deliver_coupon(order.coupon_name)
 
                 if coupon_code:
