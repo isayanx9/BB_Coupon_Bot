@@ -565,14 +565,19 @@ async def tickets(message: Message):
     lines = []
 
     for ticket in tickets_list:
+        preview = (ticket.messages or "").replace("USER:", "").strip()
+        if len(preview) > 180:
+            preview = preview[:180] + "..."
         lines.append(
             f"🎫 <code>{ticket.id}</code> • User <code>{ticket.user_id}</code>\n"
-            f"{escape(ticket.subject)}"
+            f"<b>{escape(ticket.subject)}</b>\n"
+            f"<i>{escape(preview or 'No message')}</i>"
         )
 
     await message.answer(
         "🎫 <b>Open Tickets</b>\n\n"
-        f"<blockquote>{chr(10).join(lines) if lines else 'No open tickets.'}</blockquote>"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No open tickets.'}</blockquote>\n\n"
+        "<i>Use Reply Ticket to answer and close a ticket.</i>"
     )
 
 
@@ -581,7 +586,10 @@ async def ticket_reply_start(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
-    await message.answer("💬 <b>Send ticket ID to reply.</b>")
+    await message.answer(
+        "💬 <b>Reply Ticket</b>\n\n"
+        "<blockquote>Send the ticket ID from the Open Tickets list.</blockquote>"
+    )
     await state.set_state(TicketReplyState.waiting_for_ticket_id)
 
 
@@ -596,8 +604,19 @@ async def ticket_reply_id(message: Message, state: FSMContext):
         await message.answer("Send a numeric ticket ID.")
         return
 
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        await message.answer("⚠️ <b>Ticket not found.</b>\n\nSend a valid open ticket ID.")
+        return
+
     await state.update_data(ticket_id=ticket_id)
-    await message.answer("✍️ <b>Send admin reply.</b>")
+    await message.answer(
+        "✍️ <b>Send admin reply</b>\n\n"
+        f"<blockquote>Ticket: <code>{ticket.id}</code>\n"
+        f"User: <code>{ticket.user_id}</code>\n"
+        f"Subject: <b>{escape(ticket.subject)}</b>\n\n"
+        f"{escape((ticket.messages or '')[-900:])}</blockquote>"
+    )
     await state.set_state(TicketReplyState.waiting_for_reply)
 
 
@@ -608,7 +627,12 @@ async def ticket_reply_send(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     ticket_id = data["ticket_id"]
-    ok = add_ticket_reply(ticket_id, "admin", message.text or "")
+    reply_text = (message.text or "").strip()
+    if not reply_text:
+        await message.answer("Please send a text reply for the user.")
+        return
+
+    ok = add_ticket_reply(ticket_id, "admin", reply_text)
 
     if ok:
         ticket = get_ticket_by_id(ticket_id)
@@ -618,11 +642,16 @@ async def ticket_reply_send(message: Message, state: FSMContext, bot: Bot):
                 await bot.send_message(
                     ticket.user_id,
                     "💬 <b>Admin replied to your ticket</b>\n\n"
-                    f"<blockquote>{escape(message.text or '')}</blockquote>",
+                    f"<blockquote>Ticket ID: <code>{ticket_id}</code>\n"
+                    f"{escape(reply_text)}</blockquote>\n\n"
+                    "<i>This ticket is now closed. Raise a new ticket if you still need help.</i>",
                 )
             except Exception:
                 pass
-        await message.answer("✅ <b>Ticket replied and closed.</b>")
+        await message.answer(
+            "✅ <b>Ticket replied and closed.</b>\n\n"
+            f"<blockquote>Ticket ID: <code>{ticket_id}</code></blockquote>"
+        )
         audit_admin_action(message.from_user.id, "ticket_reply", str(ticket_id))
     else:
         await message.answer("⚠️ <b>Ticket not found.</b>")

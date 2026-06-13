@@ -481,24 +481,58 @@ async def support(message: Message, state: FSMContext):
 
     await state.set_state(SupportTicketState.waiting_for_message)
     await message.answer(
-        "🎫 <b>Support Ticket</b>\n\n"
-        f"<blockquote>Contact group: <code>{GROUP_USERNAME}</code>\n"
-        "Send your issue now. Include Order ID and payment screenshot details if needed.</blockquote>"
+        "🎫 <b>Raise Ticket</b>\n\n"
+        f"<blockquote>Support group: <code>{GROUP_USERNAME}</code>\n"
+        "Send your issue in one message. Include Order ID, payment status, and screenshot details if needed.</blockquote>\n\n"
+        "<i>Example: Payment debited for order FX123 but coupon not delivered.</i>"
     )
 
 
 @dp.message(SupportTicketState.waiting_for_message)
-async def support_ticket_create(message: Message, state: FSMContext):
+async def support_ticket_create(message: Message, state: FSMContext, bot: Bot):
+    issue = (message.text or "").strip()
+    if not issue:
+        await message.answer("Please send the issue as text so admin can understand it.")
+        return
+
+    subject = issue.splitlines()[0][:80] or "User support request"
     ticket_id = create_support_ticket(
         message.from_user.id,
-        "User support request",
-        message.text or "",
+        subject,
+        issue,
     )
+
+    if not ticket_id:
+        await message.answer(
+            "⚠️ <b>Ticket could not be created.</b>\n\n"
+            "<blockquote>Please try again or contact support group directly.</blockquote>"
+        )
+        await state.clear()
+        return
+
     await message.answer(
         "✅ <b>Ticket created.</b>\n\n"
         f"<blockquote>Ticket ID: <code>{ticket_id}</code>\n"
-        "Admin can reply from Control Center.</blockquote>"
+        "Status: <b>OPEN</b>\n"
+        "Admin can reply from Control Center.</blockquote>\n\n"
+        "<i>You will receive the admin reply here in this chat.</i>"
     )
+
+    if ADMIN_ID:
+        try:
+            await bot.send_message(
+                int(ADMIN_ID),
+                "🎫 <b>New Support Ticket</b>\n\n"
+                f"<blockquote>ID: <code>{ticket_id}</code>\n"
+                f"User: <code>{message.from_user.id}</code>\n"
+                f"Username: <code>@{escape(message.from_user.username or 'none')}</code>\n"
+                f"Subject: <b>{escape(subject)}</b>\n\n"
+                f"{escape(issue[:900])}</blockquote>\n\n"
+                "Open <b>Control Center</b> -> <b>Reply Ticket</b> to answer.",
+            )
+        except Exception:
+            pass
+
     await state.clear()
 
 

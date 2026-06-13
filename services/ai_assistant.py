@@ -23,6 +23,11 @@ delivered, user should press I Paid, Recheck and send Order ID plus screenshot
 to support. Admin should verify PUBLIC_BASE_URL, Cashfree production/sandbox
 keys, CASHFREE_ENV, webhook URL, and coupon stock.
 
+Ticket flow: user taps Support, sends one issue message, receives a Ticket ID,
+and admin is notified. Admin opens Control Center, views Tickets, uses Reply
+Ticket, sends the answer, and the bot delivers the reply to the user then closes
+the ticket.
+
 Premium UX: the bot uses quote blocks, bold, italic, monospace order IDs,
 progress bars, payment energy effects, flash messages, wallet/referral/support
 guidance, and hidden admin controls.
@@ -52,7 +57,7 @@ INTENT_KEYWORDS = {
     "database": ["database", "postgres", "sql", "railway", "db", "crash"],
     "admin": ["admin", "upload", "panel", "developer", "broadcast", "ban", "setting"],
     "order": ["order", "status", "delivery", "delivered", "pending", "access log"],
-    "support": ["support", "contact", "issue", "problem", "bug", "fix"],
+    "support": ["support", "contact", "issue", "problem", "bug", "fix", "ticket", "reply"],
     "howto": ["how", "use", "start", "join", "verify", "terms", "menu"],
     "premium": ["premium", "effect", "animation", "flash", "bar", "energy", "design", "ui"],
 }
@@ -132,9 +137,10 @@ def answer_body(intent):
 
     if intent == "support":
         return (
-            "For support, send the Order ID, payment screenshot, the button you "
-            "pressed, and the exact error. Cutie can help format the report so "
-            "admin can fix it faster."
+            "To raise a ticket, tap <b>Support</b> and send one clear message. "
+            "Include Order ID, payment screenshot details, the button you pressed, "
+            "and the exact error. Admin receives the ticket instantly and can reply "
+            "from Control Center -> Reply Ticket. You will receive the reply in chat."
         )
 
     if intent == "premium":
