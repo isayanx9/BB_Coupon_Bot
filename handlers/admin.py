@@ -1,3 +1,4 @@
+import asyncio
 import csv
 from html import escape
 from pathlib import Path
@@ -82,6 +83,46 @@ from texts import (
 )
 
 router = Router()
+
+
+async def broadcast_launch_effect(message: Message):
+    frame = await message.answer(
+        "📣 <b>Broadcast initializing</b>\n\n<blockquote>Collecting message energy...</blockquote>"
+    )
+
+    frames = [
+        "📣 <b>Broadcast initializing</b>\n\n<blockquote>██░░░░░░░░ 20%</blockquote>",
+        "📣 <b>Broadcast initializing</b>\n\n<blockquote>████░░░░░░ 40%</blockquote>",
+        "📣 <b>Broadcast initializing</b>\n\n<blockquote>██████░░░░ 60%</blockquote>",
+        "📣 <b>Broadcast initializing</b>\n\n<blockquote>████████░░ 80%</blockquote>",
+        "📣 <b>Broadcast ready</b>\n\n<blockquote>██████████ 100%</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.14)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def low_stock_effect(message: Message, count: int):
+    frame = await message.answer(
+        "⚠️ <b>Low Stock Alert</b>\n\n<blockquote>Scanning inventory...</blockquote>"
+    )
+
+    frames = [
+        f"⚠️ <b>Low Stock Alert</b>\n\n<blockquote>🟡 Checking rows\nLow items: <b>{count}</b></blockquote>",
+        f"⚠️ <b>Low Stock Alert</b>\n\n<blockquote>🟠 Stock pressure rising\nLow items: <b>{count}</b></blockquote>",
+        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 Reorder soon\nLow items: <b>{count}</b></blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.16)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
 
 
 def is_admin(message: Message):
@@ -212,6 +253,10 @@ async def inventory(message: Message):
         return
 
     summary = get_coupon_summary()
+    low_stock = [item for item in summary if int(item["available"]) <= 5]
+    if low_stock:
+        await low_stock_effect(message, len(low_stock))
+
     lines = []
 
     for item in summary:
@@ -330,6 +375,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
         return
 
+    await broadcast_launch_effect(message)
     sent = 0
     failed = 0
 

@@ -179,6 +179,47 @@ async def ticket_beam_effect(message: Message):
             pass
 
 
+async def referral_success_effect(message: Message):
+    frame = await message.answer(
+        "🎉 <b>Referral Successful</b>\n\n"
+        "<blockquote>Collecting reward energy...</blockquote>"
+    )
+
+    frames = [
+        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ 1 spark collected\n🟡░░░░░░░░░</blockquote>",
+        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ 2 sparks collected\n🟡🟠░░░░░░░░</blockquote>",
+        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ Reward core charging\n🟡🟠🔵░░░░░░░</blockquote>",
+        "💰 <b>Referral Reward Ready</b>\n\n<blockquote>🟡🟠🔵🟣🟢 +1 credit added</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.16)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
+async def order_delivery_effect(message: Message):
+    frame = await message.answer(
+        "📦 <b>Delivering coupon</b>\n\n<blockquote>Locking the final code...</blockquote>"
+    )
+
+    frames = [
+        "📦 <b>Delivering coupon</b>\n\n<blockquote>🟡 Fetching code...\n█░░░░░░░░░</blockquote>",
+        "📦 <b>Delivering coupon</b>\n\n<blockquote>🟡🟠 Verifying stock...\n████░░░░░░</blockquote>",
+        "🎟 <b>Coupon ready</b>\n\n<blockquote>🟡🟠🔵 Final unlock...\n███████░░░</blockquote>",
+        "✅ <b>Coupon delivered</b>\n\n<blockquote>🟡🟠🔵🟣🟢 Code unlocked</blockquote>",
+    ]
+
+    for frame_text in frames:
+        await asyncio.sleep(0.16)
+        try:
+            await frame.edit_text(frame_text)
+        except Exception:
+            pass
+
+
 async def reject_if_banned(message: Message):
     track_user(message.from_user.id, message.from_user.username)
 
@@ -204,11 +245,13 @@ async def start_command(message: Message):
     parts = (message.text or "").split(maxsplit=1)
 
     if len(parts) == 2 and parts[1].isdigit():
-        create_referral(
+        created = create_referral(
             int(parts[1]),
             message.from_user.id,
             int(get_bot_setting("referral_reward", "5")),
         )
+        if created:
+            await referral_success_effect(message)
 
     if await reject_if_banned(message):
         return
@@ -416,6 +459,11 @@ async def deliver_paid_order(order_id, bot: Bot):
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
     reward_referral_if_needed(order.user_id, int(get_bot_setting("referral_reward", "5")))
+    delivery_intro = await bot.send_message(
+        chat_id=order.user_id,
+        text="📦 <b>Finalizing delivery</b>\n\n<blockquote>Cutie is unlocking your coupon now...</blockquote>",
+    )
+    await order_delivery_effect(delivery_intro)
 
     await bot.send_message(
         chat_id=order.user_id,
