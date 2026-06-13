@@ -105,6 +105,20 @@ async def payment_energy_effect(callback: CallbackQuery):
         await asyncio.sleep(0.15)
 
 
+async def energy_collecting_effect(callback: CallbackQuery):
+    frames = [
+        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡 Collecting spark 1/5\n🟡░░░░░░░░░</blockquote>",
+        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠 Collecting spark 2/5\n🟡🟠░░░░░░░░</blockquote>",
+        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵 Collecting spark 3/5\n🟡🟠🔵░░░░░░░</blockquote>",
+        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵🟣 Collecting spark 4/5\n🟡🟠🔵🟣░░░░░░</blockquote>",
+        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵🟣🟢 Core fully charged\n🟡🟠🔵🟣🟢</blockquote>",
+    ]
+
+    for frame in frames:
+        await flash_effect(callback, frame)
+        await asyncio.sleep(0.16)
+
+
 async def reject_if_banned(message: Message):
     track_user(message.from_user.id, message.from_user.username)
 
@@ -271,6 +285,7 @@ async def buy_coupon_type(callback: CallbackQuery):
 async def pay_order(callback: CallbackQuery):
     order_id = callback.data.replace("pay_", "")
     await flash_effect(callback, FLASH_PAYMENT_TEXT)
+    await energy_collecting_effect(callback)
     await payment_energy_effect(callback)
     order = get_order_by_id(order_id)
 
