@@ -12,6 +12,7 @@ from database.models import (
     User,
     WalletTransaction,
 )
+from sqlalchemy import text
 
 import uuid
 
@@ -332,9 +333,12 @@ def reset_platform_data():
     db = SessionLocal()
 
     try:
+        # Disable foreign key constraints for SQLite
+        db.execute(text("PRAGMA foreign_keys = OFF"))
+        
         counts = {}
         
-        # Delete in proper order to avoid foreign key constraint violations
+        # Delete all data from all tables
         counts["admin_audit_logs"] = db.query(AdminAuditLog).delete(synchronize_session=False)
         counts["support_tickets"] = db.query(SupportTicket).delete(synchronize_session=False)
         counts["stock_alerts"] = db.query(StockAlert).delete(synchronize_session=False)
@@ -347,6 +351,10 @@ def reset_platform_data():
         counts["users"] = db.query(User).delete(synchronize_session=False)
         
         db.commit()
+        
+        # Re-enable foreign key constraints
+        db.execute(text("PRAGMA foreign_keys = ON"))
+        
         return counts
 
     except Exception as e:
