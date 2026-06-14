@@ -12,7 +12,7 @@ from database.models import (
     User,
     WalletTransaction,
 )
-from sqlalchemy import text
+from sqlalchemy import text, MetaData
 
 import uuid
 
@@ -333,32 +333,37 @@ def reset_platform_data():
     db = SessionLocal()
 
     try:
-        counts = {}
+        # Reflect current database schema so we delete rows from every table
+        metadata = MetaData()
+        metadata.reflect(bind=engine)
 
-        # If using SQLite, temporarily disable foreign key checks
         is_sqlite = getattr(engine.dialect, "name", "") == "sqlite"
         if is_sqlite:
             try:
                 db.execute(text("PRAGMA foreign_keys = OFF"))
             except Exception:
-                # Non-fatal: continue without PRAGMA if it fails
                 pass
 
-        # Delete all data from all tables (order generally safe)
-        counts["admin_audit_logs"] = db.query(AdminAuditLog).delete(synchronize_session=False)
-        counts["support_tickets"] = db.query(SupportTicket).delete(synchronize_session=False)
-        counts["stock_alerts"] = db.query(StockAlert).delete(synchronize_session=False)
-        counts["flash_sales"] = db.query(FlashSale).delete(synchronize_session=False)
-        counts["banned_users"] = db.query(BannedUser).delete(synchronize_session=False)
-        counts["wallet_transactions"] = db.query(WalletTransaction).delete(synchronize_session=False)
-        counts["referrals"] = db.query(Referral).delete(synchronize_session=False)
-        counts["orders"] = db.query(Order).delete(synchronize_session=False)
-        counts["coupons"] = db.query(Coupon).delete(synchronize_session=False)
-        counts["users"] = db.query(User).delete(synchronize_session=False)
+        counts = {}
+
+        # Delete from tables in reverse dependency order to avoid FK violations
+        for table in reversed(metadata.sorted_tables):
+            # skip internal alembic table if present
+            if table.name == "alembic_version":
+                continue
+            try:
+                res = db.execute(table.delete())
+                # rowcount may be None for some DBs; coalesce to 0
+                counts[table.name] = getattr(res, 'rowcount', 0) or 0
+            except Exception as e:
+                # capture which table failed and raise structured error
+                err = f"failed deleting from {table.name}: {str(e)}"
+                print(err)
+                db.rollback()
+                return {"error": err}
 
         db.commit()
 
-        # Re-enable foreign keys for SQLite if we turned them off
         if is_sqlite:
             try:
                 db.execute(text("PRAGMA foreign_keys = ON"))
