@@ -59,3 +59,7 @@ class FlashSaleState(StatesGroup):
     waiting_for_coupon_name = State()
     waiting_for_title = State()
     waiting_for_discount_text = State()
+
+
+class ResetState(StatesGroup):
+    waiting_for_confirmation = State()

@@ -210,6 +210,26 @@ def get_all_bot_settings():
         db.close()
 
 
+def delete_bot_setting(key):
+    db = SessionLocal()
+
+    try:
+        deleted = (
+            db.query(BotSetting)
+            .filter(BotSetting.key == key)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return deleted
+
+    except Exception:
+        db.rollback()
+        return 0
+
+    finally:
+        db.close()
+
+
 def add_wallet_credit(user_id, amount, reason):
     db = SessionLocal()
 
@@ -303,6 +323,33 @@ def refund_order_wallet_if_needed(order_id, reason="Wallet refund"):
     except Exception:
         db.rollback()
         return False
+
+    finally:
+        db.close()
+
+
+def reset_platform_data():
+    db = SessionLocal()
+
+    try:
+        counts = {
+            "users": db.query(User).delete(synchronize_session=False),
+            "orders": db.query(Order).delete(synchronize_session=False),
+            "coupons": db.query(Coupon).delete(synchronize_session=False),
+            "wallet_transactions": db.query(WalletTransaction).delete(synchronize_session=False),
+            "referrals": db.query(Referral).delete(synchronize_session=False),
+            "support_tickets": db.query(SupportTicket).delete(synchronize_session=False),
+            "stock_alerts": db.query(StockAlert).delete(synchronize_session=False),
+            "flash_sales": db.query(FlashSale).delete(synchronize_session=False),
+            "admin_audit_logs": db.query(AdminAuditLog).delete(synchronize_session=False),
+            "banned_users": db.query(BannedUser).delete(synchronize_session=False),
+        }
+        db.commit()
+        return counts
+
+    except Exception:
+        db.rollback()
+        return None
 
     finally:
         db.close()

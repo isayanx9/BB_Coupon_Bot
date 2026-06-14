@@ -5,7 +5,7 @@ from pathlib import Path
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 from config import ADMIN_ID
 from database.crud import (
@@ -41,6 +41,7 @@ from database.crud import (
     set_bot_setting,
     unban_user,
     update_coupon_price,
+    reset_platform_data,
 )
 from services.coupon_service import deliver_coupon
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
@@ -81,6 +82,7 @@ from texts import (
     BTN_UNBAN_USER,
     BTN_USERS,
     BTN_WALLET_CREDIT,
+    BTN_RESET_ALL,
     COUPON_NAME,
 )
 
@@ -89,103 +91,57 @@ router = Router()
 
 async def broadcast_launch_effect(message: Message):
     frame = await message.answer(
-        "📣 <b>Broadcast initializing</b>\n\n<blockquote>Collecting message energy...</blockquote>"
+        "📣 <b>Broadcast ready</b>\n\n<blockquote>Broadcast will send now</blockquote>"
     )
-
-    frames = [
-        "📣 <b>Broadcast initializing</b>\n\n<blockquote>██░░░░░░░░ 20%</blockquote>",
-        "📣 <b>Broadcast initializing</b>\n\n<blockquote>████░░░░░░ 40%</blockquote>",
-        "📣 <b>Broadcast initializing</b>\n\n<blockquote>██████░░░░ 60%</blockquote>",
-        "📣 <b>Broadcast initializing</b>\n\n<blockquote>████████░░ 80%</blockquote>",
-        "📣 <b>Broadcast ready</b>\n\n<blockquote>██████████ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def low_stock_effect(message: Message, count: int):
     frame = await message.answer(
-        "⚠️ <b>Low Stock Alert</b>\n\n<blockquote>Scanning inventory...</blockquote>"
+        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 Reorder soon\nLow items: <b>{count}</b></blockquote>"
     )
-
-    frames = [
-        f"⚠️ <b>Low Stock Alert</b>\n\n<blockquote>🟡 Checking rows\nLow items: <b>{count}</b></blockquote>",
-        f"⚠️ <b>Low Stock Alert</b>\n\n<blockquote>🟠 Stock pressure rising\nLow items: <b>{count}</b></blockquote>",
-        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 Reorder soon\nLow items: <b>{count}</b></blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.16)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def admin_boot_effect(message: Message):
     frame = await message.answer(
-        "🛠 <b>Control Center booting</b>\n\n<blockquote>Loading hidden admin layers...</blockquote>"
+        "✅ <b>Control Center ready</b>\n\n<blockquote>⚡ Admin mode active</blockquote>"
     )
-
-    frames = [
-        "🛠 <b>Control Center booting</b>\n\n<blockquote>🔒 Verifying admin rights...\n████░░░░░░ 25%</blockquote>",
-        "🛠 <b>Control Center booting</b>\n\n<blockquote>📡 Syncing dashboards...\n██████░░░░ 50%</blockquote>",
-        "🛠 <b>Control Center booting</b>\n\n<blockquote>💠 Loading inventory tools...\n████████░░ 75%</blockquote>",
-        "✅ <b>Control Center ready</b>\n\n<blockquote>⚡ Admin mode active\n██████████ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def admin_sync_effect(message: Message, title="Admin sync"):
     frame = await message.answer(
-        f"⚡ <b>{title}</b>\n\n<blockquote>Connecting control modules...</blockquote>"
+        f"✅ <b>{title}</b>\n\n<blockquote>{title} complete</blockquote>"
     )
-
-    frames = [
-        f"⚡ <b>{title}</b>\n\n<blockquote>▰▱▱▱▱▱▱▱▱▱ 10%</blockquote>",
-        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▱▱▱▱▱▱▱ 30%</blockquote>",
-        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▱▱▱▱▱ 50%</blockquote>",
-        f"⚡ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▰▰▱▱▱ 70%</blockquote>",
-        f"✅ <b>{title}</b>\n\n<blockquote>▰▰▰▰▰▰▰▰▰▰ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.12)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def inventory_scan_effect(message: Message):
     frame = await message.answer(
-        "📦 <b>Inventory scan</b>\n\n<blockquote>Reading coupon vault...</blockquote>"
+        "✨ <b>Inventory ready</b>\n\n<blockquote>All counts loaded</blockquote>"
     )
-
-    frames = [
-        "📦 <b>Inventory scan</b>\n\n<blockquote>🔎 Loading groups...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
-        "📦 <b>Inventory scan</b>\n\n<blockquote>🧭 Measuring stock pressure...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
-        "📦 <b>Inventory scan</b>\n\n<blockquote>⚠️ Checking low stock rows...\n▸▸▸▸▸▸▸▸▸▸</blockquote>",
-        "✨ <b>Inventory ready</b>\n\n<blockquote>All counts loaded</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 def is_admin(message: Message):
@@ -920,6 +876,73 @@ async def audit_logs(message: Message):
         "🧾 <b>Audit Logs</b>\n\n"
         f"<blockquote>{chr(10).join(lines) if lines else 'No audit logs yet.'}</blockquote>"
     )
+
+
+@router.message(F.text == BTN_RESET_ALL)
+async def reset_all_confirm(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+    
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="⚠️ Yes, Reset Everything", callback_data="confirm_reset_all"),
+                InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_reset_all"),
+            ]
+        ]
+    )
+    
+    await message.answer(
+        "💥 <b>RESET EVERYTHING</b>\n\n"
+        "<blockquote>⚠️ WARNING: This will delete ALL data:\n\n"
+        "🗑 All users\n"
+        "🗑 All orders\n"
+        "🗑 All coupons\n"
+        "🗑 All wallet transactions\n"
+        "🗑 All referrals\n"
+        "🗑 All support tickets\n"
+        "🗑 All statistics\n\n"
+        "This action CANNOT be undone!</blockquote>",
+        reply_markup=markup
+    )
+
+
+@router.callback_query(F.data == "confirm_reset_all")
+async def confirm_reset_all(callback: CallbackQuery):
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        await callback.answer("Admin only.", show_alert=True)
+        return
+    
+    try:
+        counts = reset_platform_data()
+        audit_admin_action(callback.from_user.id, "reset_all", f"deleted={counts}")
+        
+        await callback.message.edit_text(
+            "✅ <b>Platform Reset Complete</b>\n\n"
+            "<blockquote>"
+            f"🗑 Users: <b>{counts.get('users', 0)}</b>\n"
+            f"🗑 Orders: <b>{counts.get('orders', 0)}</b>\n"
+            f"🗑 Coupons: <b>{counts.get('coupons', 0)}</b>\n"
+            f"🗑 Wallet Transactions: <b>{counts.get('wallet_transactions', 0)}</b>\n"
+            f"🗑 Referrals: <b>{counts.get('referrals', 0)}</b>\n"
+            f"🗑 Tickets: <b>{counts.get('support_tickets', 0)}</b>\n"
+            f"🗑 Stock Alerts: <b>{counts.get('stock_alerts', 0)}</b>\n"
+            f"🗑 Flash Sales: <b>{counts.get('flash_sales', 0)}</b>\n"
+            "</blockquote>"
+        )
+    except Exception as e:
+        await callback.message.edit_text(
+            "❌ <b>Reset failed</b>\n\n"
+            f"<blockquote>Error: {escape(str(e))}</blockquote>"
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_reset_all")
+async def cancel_reset_all(callback: CallbackQuery):
+    await callback.message.edit_text("✅ <b>Reset cancelled.</b>")
+    await callback.answer()
 
 
 @router.message(F.text.startswith("/retry_delivery "))

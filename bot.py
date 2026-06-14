@@ -21,6 +21,7 @@ from database.crud import (
     create_order,
     create_referral,
     create_support_ticket,
+    delete_bot_setting,
     get_bot_setting,
     get_coupon_by_id,
     get_coupon_stock,
@@ -34,6 +35,7 @@ from database.crud import (
     refund_order_wallet_if_needed,
     reward_referral_if_needed,
     save_payment_session,
+    set_bot_setting,
     subscribe_stock_alert,
     track_user,
     update_delivery_status,
@@ -92,237 +94,119 @@ def format_payment_error(data):
 async def flash_effect(callback: CallbackQuery, text: str):
     try:
         await callback.message.edit_text(text)
-        await asyncio.sleep(0.35)
     except Exception:
         pass
 
 
 async def payment_energy_effect(callback: CallbackQuery):
-    frames = [
-        "💳 <b>Payment Core Starting</b>\n\n<blockquote>🟡 Energy ball charging\n███░░░░░░░ 30%</blockquote>",
-        "⚡ <b>Gateway Sync</b>\n\n<blockquote>🟡 🟠 Secure route forming\n████░░░░░░ 40%</blockquote>",
-        "🔐 <b>Cashfree Shield</b>\n\n<blockquote>🟡 🟠 🔵 Order lock active\n██████░░░░ 60%</blockquote>",
-        "🚀 <b>Checkout Boost</b>\n\n<blockquote>🟡 🟠 🔵 🟣 Payment session ready\n████████░░ 80%</blockquote>",
-    ]
-
-    for frame in frames:
-        await flash_effect(callback, frame)
-        await asyncio.sleep(0.15)
+    await flash_effect(callback, "🚀 <b>Payment Ready</b>\n\n<blockquote>Secure checkout prepared</blockquote>")
 
 
 async def energy_collecting_effect(callback: CallbackQuery):
-    frames = [
-        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡 Collecting spark 1/5\n🟡░░░░░░░░░</blockquote>",
-        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠 Collecting spark 2/5\n🟡🟠░░░░░░░░</blockquote>",
-        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵 Collecting spark 3/5\n🟡🟠🔵░░░░░░░</blockquote>",
-        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵🟣 Collecting spark 4/5\n🟡🟠🔵🟣░░░░░░</blockquote>",
-        "⚡ <b>Energy Collection</b>\n\n<blockquote>🟡🟠🔵🟣🟢 Core fully charged\n🟡🟠🔵🟣🟢</blockquote>",
-    ]
-
-    for frame in frames:
-        await flash_effect(callback, frame)
-        await asyncio.sleep(0.16)
+    await flash_effect(callback, "⚡ <b>Energy Collected</b>\n\n<blockquote>Core fully charged</blockquote>")
 
 
 async def coupon_reveal_effect(message: Message):
     reveal = await message.answer(
-        "📦 <b>Opening Deal Vault</b>\n\n"
-        "<blockquote>Scanning fresh deals...</blockquote>"
+        "💎 <b>Deal Vault unlocked</b>\n\n"
+        "<blockquote>Fresh coupon stock is ready.</blockquote>"
     )
-
-    frames = [
-        "📦 <b>Opening Deal Vault</b>\n\n<blockquote>Scan layer 1/3\n░░░░░░░░░░</blockquote>",
-        "📦 <b>Opening Deal Vault</b>\n\n<blockquote>Scan layer 2/3\n████░░░░░░</blockquote>",
-        "🔥 <b>Coupons are loading</b>\n\n<blockquote>Scan layer 3/3\n███████░░░</blockquote>",
-        "💎 <b>Deal Vault unlocked</b>\n\n<blockquote>Fresh coupon stock is ready.</blockquote>",
-    ]
-
-    for frame in frames:
-        await asyncio.sleep(0.18)
-        try:
-            await reveal.edit_text(frame)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await reveal.delete()
+    except Exception:
+        pass
 
 
 async def ai_typing_effect(message: Message):
-    typing = await message.answer(
-        "💬 <b>Cutie is thinking</b>\n\n<blockquote>Typing response...</blockquote>"
-    )
-
-    frames = [
-        "💬 <b>Cutie is thinking.</b>\n\n<blockquote>Typing response.</blockquote>",
-        "💬 <b>Cutie is thinking..</b>\n\n<blockquote>Typing response..</blockquote>",
-        "💬 <b>Cutie is thinking...</b>\n\n<blockquote>Typing response...</blockquote>",
-    ]
-
-    for frame in frames:
-        await asyncio.sleep(0.2)
-        try:
-            await typing.edit_text(frame)
-        except Exception:
-            pass
+    pass
 
 
 async def ticket_beam_effect(message: Message):
     beam = await message.answer(
-        "🎫 <b>Raising support ticket</b>\n\n"
-        "<blockquote>Connecting to admin...</blockquote>"
+        "🎫 <b>Support ticket created</b>\n\n"
+        "<blockquote>Admin will respond soon.</blockquote>"
     )
-
-    frames = [
-        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Beam charging...\n█░░░░░░░░░</blockquote>",
-        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Beam linking...\n████░░░░░░</blockquote>",
-        "🎫 <b>Raising support ticket</b>\n\n<blockquote>Admin channel found...\n███████░░░</blockquote>",
-    ]
-
-    for frame in frames:
-        await asyncio.sleep(0.18)
-        try:
-            await beam.edit_text(frame)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await beam.delete()
+    except Exception:
+        pass
 
 
 async def referral_success_effect(message: Message):
     frame = await message.answer(
-        "🎉 <b>Referral Successful</b>\n\n"
-        "<blockquote>Collecting reward energy...</blockquote>"
+        "💰 <b>Referral Linked</b>\n\n"
+        "<blockquote>Reward unlocks after a verified purchase.</blockquote>"
     )
-
-    frames = [
-        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ 1 spark collected\n🟡░░░░░░░░░</blockquote>",
-        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ 2 sparks collected\n🟡🟠░░░░░░░░</blockquote>",
-        "🎉 <b>Referral Successful</b>\n\n<blockquote>⚡ Reward core charging\n🟡🟠🔵░░░░░░░</blockquote>",
-        "💰 <b>Referral Reward Ready</b>\n\n<blockquote>🟡🟠🔵🟣🟢 +1 credit added</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.16)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def order_delivery_effect(message: Message):
-    frame = await message.answer(
-        "📦 <b>Delivering coupon</b>\n\n<blockquote>Locking the final code...</blockquote>"
-    )
-
-    frames = [
-        "📦 <b>Delivering coupon</b>\n\n<blockquote>🟡 Fetching code...\n█░░░░░░░░░</blockquote>",
-        "📦 <b>Delivering coupon</b>\n\n<blockquote>🟡🟠 Verifying stock...\n████░░░░░░</blockquote>",
-        "🎟 <b>Coupon ready</b>\n\n<blockquote>🟡🟠🔵 Final unlock...\n███████░░░</blockquote>",
-        "✅ <b>Coupon delivered</b>\n\n<blockquote>🟡🟠🔵🟣🟢 Code unlocked</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.16)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    pass
 
 
 async def premium_boot_effect(message: Message):
     frame = await message.answer(
-        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>Preparing premium mode...</blockquote>"
+        "✅ <b>FlashX Ready</b>\n\n<blockquote>✨ Premium interface active</blockquote>"
     )
-
-    frames = [
-        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>🛡️ Security check 1/4\n██████░░░░ 25%</blockquote>",
-        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>📡 Syncing services 2/4\n████████░░ 50%</blockquote>",
-        "⚡ <b>Booting FlashX Engine</b>\n\n<blockquote>💎 Loading premium modules 3/4\n██████████ 75%</blockquote>",
-        "✅ <b>FlashX Ready</b>\n\n<blockquote>✨ Premium interface active\n██████████ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def vault_sync_effect(message: Message):
     frame = await message.answer(
-        "💠 <b>Opening vault</b>\n\n<blockquote>Scanning premium inventory...</blockquote>"
+        "✨ <b>Vault ready</b>\n\n<blockquote>📦 Premium coupons available</blockquote>"
     )
-
-    frames = [
-        "💠 <b>Opening vault</b>\n\n<blockquote>🔎 Reading catalog...\n▰▱▱▱▱▱▱▱▱▱ 20%</blockquote>",
-        "💠 <b>Opening vault</b>\n\n<blockquote>🧭 Matching coupon groups...\n▰▰▰▱▱▱▱▱▱▱ 40%</blockquote>",
-        "💠 <b>Opening vault</b>\n\n<blockquote>⚡ Unlocking live stock...\n▰▰▰▰▰▱▱▱▱▱ 60%</blockquote>",
-        "✨ <b>Vault ready</b>\n\n<blockquote>📦 Premium coupons available\n▰▰▰▰▰▰▰▰▰▰ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def wallet_charge_effect(message: Message):
     frame = await message.answer(
-        "💎 <b>Wallet syncing</b>\n\n<blockquote>Charging your balance...</blockquote>"
+        "✅ <b>Wallet ready</b>\n\n<blockquote>💠 Credits confirmed</blockquote>"
     )
-
-    frames = [
-        "💎 <b>Wallet syncing</b>\n\n<blockquote>⚡ Collecting credits...\n▓▓░░░░░░░░ 20%</blockquote>",
-        "💎 <b>Wallet syncing</b>\n\n<blockquote>🟡 Routing funds...\n▓▓▓▓░░░░░░ 40%</blockquote>",
-        "💎 <b>Wallet syncing</b>\n\n<blockquote>🔵 Updating balance...\n▓▓▓▓▓▓░░░░ 60%</blockquote>",
-        "✅ <b>Wallet ready</b>\n\n<blockquote>💠 Credits confirmed\n▓▓▓▓▓▓▓▓▓▓ 100%</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def referral_orbit_effect(message: Message):
     frame = await message.answer(
-        "🎁 <b>Referral orbit</b>\n\n<blockquote>Tracking invited user...</blockquote>"
+        "✅ <b>Referral complete</b>\n\n<blockquote>Referral tracked successfully</blockquote>"
     )
-
-    frames = [
-        "🎁 <b>Referral orbit</b>\n\n<blockquote>⚡ Checking join state...\n●○○</blockquote>",
-        "🎁 <b>Referral orbit</b>\n\n<blockquote>🔎 Validating start link...\n●●○</blockquote>",
-        "🎁 <b>Referral orbit</b>\n\n<blockquote>💰 Reward locking...\n●●●</blockquote>",
-        "✅ <b>Referral complete</b>\n\n<blockquote>+1 credit added</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def user_ai_effect(message: Message):
+    pass
+
+
+async def referral_link_effect(message: Message):
     frame = await message.answer(
-        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>Loading bot knowledge...</blockquote>"
+        "✅ <b>Referral saved</b>\n\n<blockquote>Invite will unlock after a verified purchase.</blockquote>"
     )
-
-    frames = [
-        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●○○\nReading bot rules...</blockquote>",
-        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●●○\nChecking wallet and orders...</blockquote>",
-        "🤖 <b>FlashX AI waking up</b>\n\n<blockquote>●●●\nGenerating answer...</blockquote>",
-        "✨ <b>FlashX AI ready</b>\n\n<blockquote>Smart support online</blockquote>",
-    ]
-
-    for frame_text in frames:
-        await asyncio.sleep(0.14)
-        try:
-            await frame.edit_text(frame_text)
-        except Exception:
-            pass
+    await asyncio.sleep(0.5)
+    try:
+        await frame.delete()
+    except Exception:
+        pass
 
 
 async def reject_if_banned(message: Message):
@@ -350,13 +234,13 @@ async def start_command(message: Message):
     parts = (message.text or "").split(maxsplit=1)
 
     if len(parts) == 2 and parts[1].isdigit():
-        created = create_referral(
-            int(parts[1]),
-            message.from_user.id,
-            1,
-        )
-        if created:
-            await referral_success_effect(message)
+        referrer_id = int(parts[1])
+        if referrer_id != message.from_user.id:
+            set_bot_setting(
+                f"pending_referral:{message.from_user.id}",
+                str(referrer_id),
+            )
+            await referral_link_effect(message)
 
     if await reject_if_banned(message):
         return
@@ -393,6 +277,21 @@ async def accept_terms(callback: CallbackQuery):
         return
 
     await flash_effect(callback, FLASH_ACCEPT_TEXT)
+
+    pending_referral = get_bot_setting(f"pending_referral:{callback.from_user.id}", "")
+    if pending_referral and pending_referral.isdigit():
+        created = create_referral(
+            int(pending_referral),
+            callback.from_user.id,
+            0,
+        )
+        delete_bot_setting(f"pending_referral:{callback.from_user.id}")
+        if created:
+            await callback.message.answer(
+                "🎁 <b>Referral saved</b>\n\n"
+                "<blockquote>Your referrer will receive credit after you make your first purchase.</blockquote>"
+            )
+
     await callback.message.edit_text(
         "✨ <b>Terms accepted.</b>\n\n"
         "<blockquote>Cutie AI unlocked your premium coupon dashboard.</blockquote>"
@@ -545,7 +444,7 @@ async def pay_order(callback: CallbackQuery):
     save_payment_session(order_id, data["payment_session_id"])
     await flash_effect(
         callback,
-        "✅ <b>Payment Link Ready</b>\n\n<blockquote>🟡 🟠 🔵 🟣 🟢 Cutie prepared secure checkout\n██████████ 100%</blockquote>",
+        "✅ <b>Payment Link Ready</b>\n\n<blockquote>🟡 🟠 🔵 🟣 🟢 Cutie prepared secure checkout</blockquote>",
     )
     payments = data.get("payments") if isinstance(data.get("payments"), dict) else {}
     payment_url = (
@@ -638,7 +537,39 @@ async def finalize_paid_order(order_id, bot: Bot):
 @dp.callback_query(F.data.startswith("recheck_"))
 async def recheck_payment(callback: CallbackQuery, bot: Bot):
     order_id = callback.data.replace("recheck_", "")
+    order = get_order_by_id(order_id)
+    
+    if not order:
+        await callback.message.answer("⚠️ <b>Order not found.</b>")
+        await callback.answer()
+        return
+    
+    if order.delivery_status == "DELIVERED":
+        await callback.message.answer(
+            "✅ <b>Order already delivered.</b>\n\n"
+            f"<blockquote>Order ID: <code>{order_id}</code></blockquote>"
+        )
+        await callback.answer()
+        return
+    
+    if order.payment_status == "SUCCESS":
+        await callback.message.answer(
+            "✅ <b>Payment already verified.</b>\n\n"
+            f"<blockquote>Your coupon is being prepared.</blockquote>"
+        )
+        await callback.answer()
+        return
+    
     data = get_cashfree_order_status(order_id)
+    
+    if "error" in data:
+        await callback.message.answer(
+            "⚠️ <b>Cannot verify payment status.</b>\n\n"
+            f"<blockquote>Please try again later or contact support.</blockquote>"
+        )
+        await callback.answer()
+        return
+    
     status = (
         data.get("order_status")
         or data.get("payment_status")
@@ -646,19 +577,20 @@ async def recheck_payment(callback: CallbackQuery, bot: Bot):
         or ""
     ).upper()
 
-    if status in {"PAID", "SUCCESS", "ACTIVE"}:
+    if status == "PAID":
         delivered, detail = await finalize_paid_order(order_id, bot)
         if delivered:
-            await callback.message.answer("✅ <b>Payment verified.</b>")
+            await callback.message.answer("✅ <b>Payment verified & coupon delivered.</b>")
         else:
             await callback.message.answer(
-                "⚠️ <b>Payment verified, delivery needs admin.</b>\n\n"
+                "⚠️ <b>Payment verified, but delivery needs admin support.</b>\n\n"
                 f"<blockquote>{escape(detail)}</blockquote>"
             )
     else:
         await callback.message.answer(
-            "⏳ <b>Payment is not confirmed yet.</b>\n\n"
-            f"<blockquote>Status: <code>{escape(str(status or data))}</code></blockquote>"
+            "⏳ <b>Payment not confirmed yet.</b>\n\n"
+            f"<blockquote>Status: <code>{escape(str(status or 'Unknown'))}</code>\n\n"
+            "Please complete the payment through the link and try again.</blockquote>"
         )
 
     await callback.answer()

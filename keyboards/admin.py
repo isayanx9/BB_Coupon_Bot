@@ -22,6 +22,7 @@ from texts import (
     BTN_UNBAN_USER,
     BTN_USERS,
     BTN_WALLET_CREDIT,
+    BTN_RESET_ALL,
 )
 
 
@@ -37,6 +38,7 @@ def developer_menu():
             [KeyboardButton(text=BTN_TICKETS), KeyboardButton(text=BTN_REPLY_TICKET)],
             [KeyboardButton(text=BTN_WALLET_CREDIT), KeyboardButton(text=BTN_FLASH_SALE)],
             [KeyboardButton(text=BTN_BACKUP), KeyboardButton(text=BTN_AUDIT_LOGS)],
+            [KeyboardButton(text=BTN_RESET_ALL)],
             [KeyboardButton(text=BTN_MAIN_MENU)],
             [KeyboardButton(text=BTN_EXIT_DEVELOPER)],
         ],
