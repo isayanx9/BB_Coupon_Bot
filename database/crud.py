@@ -332,23 +332,26 @@ def reset_platform_data():
     db = SessionLocal()
 
     try:
-        counts = {
-            "users": db.query(User).delete(synchronize_session=False),
-            "orders": db.query(Order).delete(synchronize_session=False),
-            "coupons": db.query(Coupon).delete(synchronize_session=False),
-            "wallet_transactions": db.query(WalletTransaction).delete(synchronize_session=False),
-            "referrals": db.query(Referral).delete(synchronize_session=False),
-            "support_tickets": db.query(SupportTicket).delete(synchronize_session=False),
-            "stock_alerts": db.query(StockAlert).delete(synchronize_session=False),
-            "flash_sales": db.query(FlashSale).delete(synchronize_session=False),
-            "admin_audit_logs": db.query(AdminAuditLog).delete(synchronize_session=False),
-            "banned_users": db.query(BannedUser).delete(synchronize_session=False),
-        }
+        counts = {}
+        
+        # Delete in proper order to avoid foreign key constraint violations
+        counts["admin_audit_logs"] = db.query(AdminAuditLog).delete(synchronize_session=False)
+        counts["support_tickets"] = db.query(SupportTicket).delete(synchronize_session=False)
+        counts["stock_alerts"] = db.query(StockAlert).delete(synchronize_session=False)
+        counts["flash_sales"] = db.query(FlashSale).delete(synchronize_session=False)
+        counts["banned_users"] = db.query(BannedUser).delete(synchronize_session=False)
+        counts["wallet_transactions"] = db.query(WalletTransaction).delete(synchronize_session=False)
+        counts["referrals"] = db.query(Referral).delete(synchronize_session=False)
+        counts["orders"] = db.query(Order).delete(synchronize_session=False)
+        counts["coupons"] = db.query(Coupon).delete(synchronize_session=False)
+        counts["users"] = db.query(User).delete(synchronize_session=False)
+        
         db.commit()
         return counts
 
-    except Exception:
+    except Exception as e:
         db.rollback()
+        print(f"Reset error: {str(e)}")
         return None
 
     finally:
