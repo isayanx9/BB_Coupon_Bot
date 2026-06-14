@@ -1,4 +1,4 @@
-from database.db import SessionLocal
+from database.db import SessionLocal, engine
 from database.models import (
     AdminAuditLog,
     BannedUser,
@@ -333,12 +333,18 @@ def reset_platform_data():
     db = SessionLocal()
 
     try:
-        # Disable foreign key constraints for SQLite
-        db.execute(text("PRAGMA foreign_keys = OFF"))
-        
         counts = {}
-        
-        # Delete all data from all tables
+
+        # If using SQLite, temporarily disable foreign key checks
+        is_sqlite = getattr(engine.dialect, "name", "") == "sqlite"
+        if is_sqlite:
+            try:
+                db.execute(text("PRAGMA foreign_keys = OFF"))
+            except Exception:
+                # Non-fatal: continue without PRAGMA if it fails
+                pass
+
+        # Delete all data from all tables (order generally safe)
         counts["admin_audit_logs"] = db.query(AdminAuditLog).delete(synchronize_session=False)
         counts["support_tickets"] = db.query(SupportTicket).delete(synchronize_session=False)
         counts["stock_alerts"] = db.query(StockAlert).delete(synchronize_session=False)
@@ -349,18 +355,24 @@ def reset_platform_data():
         counts["orders"] = db.query(Order).delete(synchronize_session=False)
         counts["coupons"] = db.query(Coupon).delete(synchronize_session=False)
         counts["users"] = db.query(User).delete(synchronize_session=False)
-        
+
         db.commit()
-        
-        # Re-enable foreign key constraints
-        db.execute(text("PRAGMA foreign_keys = ON"))
-        
+
+        # Re-enable foreign keys for SQLite if we turned them off
+        if is_sqlite:
+            try:
+                db.execute(text("PRAGMA foreign_keys = ON"))
+            except Exception:
+                pass
+
         return counts
 
     except Exception as e:
         db.rollback()
-        print(f"Reset error: {str(e)}")
-        return None
+        # Return structured error so callers can display more info to admin
+        err = str(e)
+        print(f"Reset error: {err}")
+        return {"error": err}
 
     finally:
         db.close()

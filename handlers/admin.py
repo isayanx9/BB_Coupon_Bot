@@ -986,17 +986,29 @@ async def confirm_reset_all(callback: CallbackQuery):
     
     try:
         counts = reset_platform_data()
-        
+
+        # Structured error returned from reset_platform_data()
+        if isinstance(counts, dict) and counts.get("error"):
+            err = counts.get("error")
+            audit_admin_action(callback.from_user.id, "reset_all_failed", err)
+            await callback.message.edit_text(
+                "❌ <b>Reset failed</b>\n\n"
+                f"<blockquote>Error: {escape(str(err))}</blockquote>"
+            )
+            await callback.answer()
+            return
+
         if counts is None:
+            audit_admin_action(callback.from_user.id, "reset_all_failed", "unknown error")
             await callback.message.edit_text(
                 "❌ <b>Reset failed</b>\n\n"
                 "<blockquote>Database error occurred. Please try again.</blockquote>"
             )
             await callback.answer()
             return
-        
+
         audit_admin_action(callback.from_user.id, "reset_all", f"deleted={counts}")
-        
+
         await callback.message.edit_text(
             "✅ <b>Platform Reset Complete</b>\n\n"
             "<blockquote>"
@@ -1011,11 +1023,12 @@ async def confirm_reset_all(callback: CallbackQuery):
             "</blockquote>"
         )
     except Exception as e:
+        audit_admin_action(callback.from_user.id, "reset_all_failed", str(e))
         await callback.message.edit_text(
             "❌ <b>Reset failed</b>\n\n"
             f"<blockquote>Error: {escape(str(e))}</blockquote>"
         )
-    
+
     await callback.answer()
 
 
