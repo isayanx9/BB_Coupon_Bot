@@ -99,114 +99,306 @@ async def flash_effect(callback: CallbackQuery, text: str):
 
 
 async def payment_energy_effect(callback: CallbackQuery):
-    await flash_effect(callback, "🚀 <b>Payment Ready</b>\n\n<blockquote>Secure checkout prepared</blockquote>")
+    frames = [
+        "🚀 <b>Payment Ready</b>\n\n<blockquote>⚡ Charging...</blockquote>",
+        "🚀 <b>Payment Ready</b>\n\n<blockquote>💥 Core energy active</blockquote>",
+        "🚀 <b>Payment Ready</b>\n\n<blockquote>⭐ Secure checkout ready</blockquote>",
+    ]
+    for text in frames:
+        try:
+            await callback.message.edit_text(text)
+        except Exception:
+            pass
+        await asyncio.sleep(0.3)
 
 
 async def energy_collecting_effect(callback: CallbackQuery):
-    await flash_effect(callback, "⚡ <b>Energy Collected</b>\n\n<blockquote>Core fully charged</blockquote>")
+    frames = [
+        "⚡ <b>Energy Collecting</b>\n\n<blockquote>🔢 Core syncing...</blockquote>",
+        "⚡ <b>Energy Collecting</b>\n\n<blockquote>🔣 Power rising...</blockquote>",
+        "⚡ <b>Energy Collecting</b>\n\n<blockquote>✅ Core fully charged</blockquote>",
+    ]
+    for text in frames:
+        try:
+            await callback.message.edit_text(text)
+        except Exception:
+            pass
+        await asyncio.sleep(0.3)
 
 
 async def coupon_reveal_effect(message: Message):
-    reveal = await message.answer(
-        "💎 <b>Deal Vault unlocked</b>\n\n"
-        "<blockquote>Fresh coupon stock is ready.</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await reveal.delete()
-    except Exception:
-        pass
+    frames = [
+        "💨 <b>Vault Unlocking</b>\n\n<blockquote>🔍 Scanning stock...</blockquote>",
+        "💨 <b>Vault Unlocking</b>\n\n<blockquote>🌟 Loading deals...</blockquote>",
+        "💬 <b>Deal Vault Ready</b>\n\n<blockquote>🌟 Fresh stock unlocked</blockquote>",
+    ]
+    reveal = None
+    for text in frames:
+        if reveal:
+            try:
+                await reveal.edit_text(text)
+            except Exception:
+                pass
+        else:
+            reveal = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if reveal:
+        await asyncio.sleep(0.5)
+        try:
+            await reveal.delete()
+        except Exception:
+            pass
 
 
 async def ai_typing_effect(message: Message):
-    pass
+    frames = [
+        "🤖 <b>Cutie Thinking</b>\n\n<blockquote>📧 Analyzing question...</blockquote>",
+        "🤖 <b>Cutie Thinking</b>\n\n<blockquote>📚 Searching knowledge...</blockquote>",
+        "🤖 <b>Cutie Ready</b>\n\n<blockquote>✅ Answer prepared</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def ticket_beam_effect(message: Message):
-    beam = await message.answer(
-        "🎫 <b>Support ticket created</b>\n\n"
-        "<blockquote>Admin will respond soon.</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await beam.delete()
-    except Exception:
-        pass
+    frames = [
+        "🎨 <b>Creating Ticket</b>\n\n<blockquote>🚀 Sending to admin...</blockquote>",
+        "🎨 <b>Creating Ticket</b>\n\n<blockquote>🔔 Notifying support...</blockquote>",
+        "🎨 <b>Ticket Created</b>\n\n<blockquote>✅ Admin will respond soon</blockquote>",
+    ]
+    beam = None
+    for text in frames:
+        if beam:
+            try:
+                await beam.edit_text(text)
+            except Exception:
+                pass
+        else:
+            beam = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if beam:
+        await asyncio.sleep(0.5)
+        try:
+            await beam.delete()
+        except Exception:
+            pass
 
 
 async def referral_success_effect(message: Message):
-    frame = await message.answer(
-        "💰 <b>Referral Linked</b>\n\n"
-        "<blockquote>Reward unlocks after a verified purchase.</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "🎆 <b>Referral Linked</b>\n\n<blockquote>🔗 Validating link...</blockquote>",
+        "🎆 <b>Referral Linked</b>\n\n<blockquote>💢 Tracking referrer...</blockquote>",
+        "🎉 <b>Referral Complete</b>\n\n<blockquote>🌟 Reward unlocks after purchase</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def order_delivery_effect(message: Message):
-    pass
+    frames = [
+        "🚀 <b>Processing Order</b>\n\n<blockquote>📦 Preparing coupon...</blockquote>",
+        "🚀 <b>Processing Order</b>\n\n<blockquote>📫 Encoding code...</blockquote>",
+        "🌟 <b>Order Ready</b>\n\n<blockquote>✅ Your coupon is here!</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def premium_boot_effect(message: Message):
-    frame = await message.answer(
-        "✅ <b>FlashX Ready</b>\n\n<blockquote>✨ Premium interface active</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "🔐 <b>FlashX Initializing</b>\n\n<blockquote>🔍 Loading interface...</blockquote>",
+        "🔐 <b>FlashX Initializing</b>\n\n<blockquote>📊 Syncing data...</blockquote>",
+        "✨ <b>FlashX Ready</b>\n\n<blockquote>📄 Premium interface active</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def vault_sync_effect(message: Message):
-    frame = await message.answer(
-        "✨ <b>Vault ready</b>\n\n<blockquote>📦 Premium coupons available</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "💫 <b>Vault Syncing</b>\n\n<blockquote>⚡ Connecting...</blockquote>",
+        "💫 <b>Vault Syncing</b>\n\n<blockquote>📦 Loading inventory...</blockquote>",
+        "🌟 <b>Vault Ready</b>\n\n<blockquote>📄 Premium coupons available</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def wallet_charge_effect(message: Message):
-    frame = await message.answer(
-        "✅ <b>Wallet ready</b>\n\n<blockquote>💠 Credits confirmed</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "💰 <b>Wallet Loading</b>\n\n<blockquote>⚡ Reading balance...</blockquote>",
+        "💰 <b>Wallet Loading</b>\n\n<blockquote>💸 Verifying credits...</blockquote>",
+        "💲 <b>Wallet Ready</b>\n\n<blockquote>✅ Credits confirmed</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def referral_orbit_effect(message: Message):
-    frame = await message.answer(
-        "✅ <b>Referral complete</b>\n\n<blockquote>Referral tracked successfully</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "🌙 <b>Referral Orbiting</b>\n\n<blockquote>😁 Spinning link...</blockquote>",
+        "🌛 <b>Referral Orbiting</b>\n\n<blockquote>🌟 Collecting data...</blockquote>",
+        "🌜 <b>Referral Complete</b>\n\n<blockquote>✅ Referral tracked successfully</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def user_ai_effect(message: Message):
-    pass
+    frames = [
+        "🤖 <b>Cutie AI</b>\n\n<blockquote>🔍 Analyzing...</blockquote>",
+        "🤖 <b>Cutie AI</b>\n\n<blockquote>🌟 Processing...</blockquote>",
+        "🤗 <b>Cutie Ready</b>\n\n<blockquote>✅ Response prepared</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def referral_link_effect(message: Message):
-    frame = await message.answer(
-        "✅ <b>Referral saved</b>\n\n<blockquote>Invite will unlock after a verified purchase.</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "🔗 <b>Referral Link</b>\n\n<blockquote>🔍 Generating invite...</blockquote>",
+        "🔗 <b>Referral Link</b>\n\n<blockquote>📋 Encoding data...</blockquote>",
+        "🎁 <b>Referral Saved</b>\n\n<blockquote>✅ Invite unlocks after purchase</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.3)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def reject_if_banned(message: Message):

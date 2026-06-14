@@ -90,58 +90,129 @@ router = Router()
 
 
 async def broadcast_launch_effect(message: Message):
-    frame = await message.answer(
-        "📣 <b>Broadcast ready</b>\n\n<blockquote>Broadcast will send now</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "📣 <b>Broadcasting</b>\n\n<blockquote>🔴 Starting transmission...</blockquote>",
+        "📣 <b>Broadcasting</b>\n\n<blockquote>🟠 Connecting to users...</blockquote>",
+        "📣 <b>Broadcasting</b>\n\n<blockquote>🟡 Sending message...</blockquote>",
+        "📣 <b>Broadcasting</b>\n\n<blockquote>🟢 Delivered!</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.4)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def low_stock_effect(message: Message, count: int):
-    frame = await message.answer(
-        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 Reorder soon\nLow items: <b>{count}</b></blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>⚠️ Scanning inventory...\nCritical items: <b>{count}</b></blockquote>",
+        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 LOW STOCK DETECTED\nCritical items: <b>{count}</b></blockquote>",
+        f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>✅ Alert sent to admin\nCritical items: <b>{count}</b></blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.4)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def admin_boot_effect(message: Message):
-    frame = await message.answer(
-        "✅ <b>Control Center ready</b>\n\n<blockquote>⚡ Admin mode active</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "🔐 <b>Control Center</b>\n\n<blockquote>🟢 Initializing admin panel...</blockquote>",
+        "🔐 <b>Control Center</b>\n\n<blockquote>🟢 Loading dashboard...</blockquote>",
+        "🔐 <b>Control Center</b>\n\n<blockquote>✅ Admin mode activated</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.4)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def admin_sync_effect(message: Message, title="Admin sync"):
-    frame = await message.answer(
-        f"✅ <b>{title}</b>\n\n<blockquote>{title} complete</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        f"⚡ <b>{title}</b>\n\n<blockquote>⏳ Processing...</blockquote>",
+        f"⚡ <b>{title}</b>\n\n<blockquote>⏳ Syncing data...</blockquote>",
+        f"✅ <b>{title}</b>\n\n<blockquote>✅ Complete!</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.4)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 async def inventory_scan_effect(message: Message):
-    frame = await message.answer(
-        "✨ <b>Inventory ready</b>\n\n<blockquote>All counts loaded</blockquote>"
-    )
-    await asyncio.sleep(0.5)
-    try:
-        await frame.delete()
-    except Exception:
-        pass
+    frames = [
+        "📦 <b>Inventory Scan</b>\n\n<blockquote>🔍 Scanning stock...</blockquote>",
+        "📦 <b>Inventory Scan</b>\n\n<blockquote>📊 Analyzing data...</blockquote>",
+        "📦 <b>Inventory Scan</b>\n\n<blockquote>✅ Inventory loaded</blockquote>",
+    ]
+    frame = None
+    for text in frames:
+        if frame:
+            try:
+                await frame.edit_text(text)
+            except Exception:
+                pass
+        else:
+            frame = await message.answer(text)
+        await asyncio.sleep(0.4)
+    
+    if frame:
+        await asyncio.sleep(0.5)
+        try:
+            await frame.delete()
+        except Exception:
+            pass
 
 
 def is_admin(message: Message):
@@ -915,6 +986,15 @@ async def confirm_reset_all(callback: CallbackQuery):
     
     try:
         counts = reset_platform_data()
+        
+        if counts is None:
+            await callback.message.edit_text(
+                "❌ <b>Reset failed</b>\n\n"
+                "<blockquote>Database error occurred. Please try again.</blockquote>"
+            )
+            await callback.answer()
+            return
+        
         audit_admin_action(callback.from_user.id, "reset_all", f"deleted={counts}")
         
         await callback.message.edit_text(
