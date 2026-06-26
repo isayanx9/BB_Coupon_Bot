@@ -3,4 +3,3 @@ venv/
 __pycache__/
 *.pyc
 node_modules/
-backup_before_*.zip
