@@ -17,7 +17,9 @@ from config import (
     require_env,
 )
 from database.crud import (
+    add_feedback,
     add_wallet_credit,
+    add_wallet_credit_once,
     create_order,
     create_referral,
     create_support_ticket,
@@ -26,6 +28,8 @@ from database.crud import (
     get_coupon_by_id,
     get_coupon_stock,
     get_coupon_type_options,
+    get_active_flash_sales,
+    get_active_flash_sale_for_coupon,
     get_order_by_id,
     get_referral_count,
     get_user_orders,
@@ -34,12 +38,18 @@ from database.crud import (
     is_user_banned,
     refund_order_wallet_if_needed,
     reward_referral_if_needed,
+    save_order_coupon_code,
     save_payment_session,
     set_bot_setting,
     subscribe_stock_alert,
     track_user,
     update_delivery_status,
     update_order_status,
+    update_user_login_streak,
+    get_eligible_coupons,
+    claim_coupon_for_user,
+    mark_milestone_claimed,
+    get_user_by_telegram_id,
 )
 from database.db import initialize_database
 from database.models import Base
@@ -50,7 +60,7 @@ from keyboards.user import admin_main_menu, join_keyboard, terms_keyboard, user_
 from services.ai_assistant import get_ai_answer
 from services.coupon_service import deliver_coupon
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
-from states.order_states import AIAssist, SupportTicketState, WalletTopUpState
+from states.order_states import AIAssist, FeedbackState, SupportTicketState, WalletTopUpState
 from texts import (
     BOT_USERNAME,
     BTN_ACCESS_LOG,
@@ -88,6 +98,30 @@ def format_payment_error(data):
     return (
         f"Code: <code>{escape(str(code))}</code>\n"
         f"Message: <i>{escape(str(message))}</i>"
+    )
+
+
+async def send_progress_messages(message: Message, frames, delay=0.3):
+    for text in frames:
+        try:
+            await message.answer(text)
+        except Exception:
+            pass
+        await asyncio.sleep(delay)
+
+
+def feedback_keyboard(order_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1", callback_data=f"feedback_{order_id}_1"),
+                InlineKeyboardButton(text="2", callback_data=f"feedback_{order_id}_2"),
+                InlineKeyboardButton(text="3", callback_data=f"feedback_{order_id}_3"),
+                InlineKeyboardButton(text="4", callback_data=f"feedback_{order_id}_4"),
+                InlineKeyboardButton(text="5", callback_data=f"feedback_{order_id}_5"),
+            ],
+            [InlineKeyboardButton(text="Skip", callback_data=f"feedback_{order_id}_0")],
+        ]
     )
 
 
@@ -132,23 +166,7 @@ async def coupon_reveal_effect(message: Message):
         "💨 <b>Vault Unlocking</b>\n\n<blockquote>🌟 Loading deals...</blockquote>",
         "💬 <b>Deal Vault Ready</b>\n\n<blockquote>🌟 Fresh stock unlocked</blockquote>",
     ]
-    reveal = None
-    for text in frames:
-        if reveal:
-            try:
-                await reveal.edit_text(text)
-            except Exception:
-                pass
-        else:
-            reveal = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if reveal:
-        await asyncio.sleep(0.5)
-        try:
-            await reveal.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def ai_typing_effect(message: Message):
@@ -157,23 +175,7 @@ async def ai_typing_effect(message: Message):
         "🤖 <b>Cutie Thinking</b>\n\n<blockquote>📚 Searching knowledge...</blockquote>",
         "🤖 <b>Cutie Ready</b>\n\n<blockquote>✅ Answer prepared</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def ticket_beam_effect(message: Message):
@@ -182,23 +184,7 @@ async def ticket_beam_effect(message: Message):
         "🎨 <b>Creating Ticket</b>\n\n<blockquote>🔔 Notifying support...</blockquote>",
         "🎨 <b>Ticket Created</b>\n\n<blockquote>✅ Admin will respond soon</blockquote>",
     ]
-    beam = None
-    for text in frames:
-        if beam:
-            try:
-                await beam.edit_text(text)
-            except Exception:
-                pass
-        else:
-            beam = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if beam:
-        await asyncio.sleep(0.5)
-        try:
-            await beam.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def referral_success_effect(message: Message):
@@ -207,23 +193,7 @@ async def referral_success_effect(message: Message):
         "🎆 <b>Referral Linked</b>\n\n<blockquote>💢 Tracking referrer...</blockquote>",
         "🎉 <b>Referral Complete</b>\n\n<blockquote>🌟 Reward unlocks after purchase</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def order_delivery_effect(message: Message):
@@ -232,23 +202,7 @@ async def order_delivery_effect(message: Message):
         "🚀 <b>Processing Order</b>\n\n<blockquote>📫 Encoding code...</blockquote>",
         "🌟 <b>Order Ready</b>\n\n<blockquote>✅ Your coupon is here!</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def premium_boot_effect(message: Message):
@@ -257,23 +211,7 @@ async def premium_boot_effect(message: Message):
         "🔐 <b>FlashX Initializing</b>\n\n<blockquote>📊 Syncing data...</blockquote>",
         "✨ <b>FlashX Ready</b>\n\n<blockquote>📄 Premium interface active</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def vault_sync_effect(message: Message):
@@ -282,23 +220,7 @@ async def vault_sync_effect(message: Message):
         "💫 <b>Vault Syncing</b>\n\n<blockquote>📦 Loading inventory...</blockquote>",
         "🌟 <b>Vault Ready</b>\n\n<blockquote>📄 Premium coupons available</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def wallet_charge_effect(message: Message):
@@ -307,23 +229,7 @@ async def wallet_charge_effect(message: Message):
         "💰 <b>Wallet Loading</b>\n\n<blockquote>💸 Verifying credits...</blockquote>",
         "💲 <b>Wallet Ready</b>\n\n<blockquote>✅ Credits confirmed</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def referral_orbit_effect(message: Message):
@@ -332,23 +238,7 @@ async def referral_orbit_effect(message: Message):
         "🌛 <b>Referral Orbiting</b>\n\n<blockquote>🌟 Collecting data...</blockquote>",
         "🌜 <b>Referral Complete</b>\n\n<blockquote>✅ Referral tracked successfully</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def user_ai_effect(message: Message):
@@ -357,23 +247,7 @@ async def user_ai_effect(message: Message):
         "🤖 <b>Cutie AI</b>\n\n<blockquote>🌟 Processing...</blockquote>",
         "🤗 <b>Cutie Ready</b>\n\n<blockquote>✅ Response prepared</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def referral_link_effect(message: Message):
@@ -382,23 +256,7 @@ async def referral_link_effect(message: Message):
         "🔗 <b>Referral Link</b>\n\n<blockquote>📋 Encoding data...</blockquote>",
         "🎁 <b>Referral Saved</b>\n\n<blockquote>✅ Invite unlocks after purchase</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.3)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def reject_if_banned(message: Message):
@@ -506,6 +364,71 @@ async def decline_terms(callback: CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data.startswith("claim_reward_"))
+async def claim_reward_callback(callback: CallbackQuery):
+    if await reject_if_banned(callback.message):
+        await callback.answer()
+        return
+
+    parts = callback.data.split("_")
+    milestone = int(parts[-1]) if parts[-1].isdigit() else None
+    if milestone not in (15, 30):
+        await callback.answer("Invalid reward.")
+        return
+
+    # list eligible coupons
+    max_price = 10 if milestone == 30 else None
+    if max_price is not None:
+        eligible = get_eligible_coupons(max_price=max_price)
+    else:
+        eligible = get_eligible_coupons()
+
+    if not eligible:
+        await callback.message.answer("😔 <b>No eligible coupons available right now.</b>")
+        await callback.answer()
+        return
+
+    keyboard = []
+    for c in eligible:
+        keyboard.append([InlineKeyboardButton(text=f"{c.coupon_name} • Rs {c.selling_price}", callback_data=f"claim_coupon_{c.id}_{milestone}")])
+
+    await callback.message.answer("🎟 <b>Select your reward coupon</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("claim_coupon_"))
+async def claim_coupon_callback(callback: CallbackQuery):
+    if await reject_if_banned(callback.message):
+        await callback.answer()
+        return
+
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.answer("Invalid selection.")
+        return
+
+    try:
+        coupon_id = int(parts[2])
+        milestone = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else None
+    except Exception:
+        await callback.answer("Invalid selection.")
+        return
+
+    code = claim_coupon_for_user(coupon_id, callback.from_user.id)
+    if not code:
+        await callback.message.answer("⚠️ <b>Could not claim that coupon. It may have been taken.</b>")
+        await callback.answer()
+        return
+
+    # mark milestone claimed
+    mark_milestone_claimed(callback.from_user.id, milestone)
+
+    await callback.message.answer(
+        f"🎉 <b>Coupon claimed!</b>\n\n<blockquote>Your code: <code>{escape(code)}</code></blockquote>"
+    )
+    await callback.answer()
+
+
 @dp.message(F.text == BTN_DEAL_VAULT)
 async def buy_coupons(message: Message):
     if await reject_if_banned(message):
@@ -514,6 +437,8 @@ async def buy_coupons(message: Message):
     await vault_sync_effect(message)
     await coupon_reveal_effect(message)
     options = get_coupon_type_options()
+    flash_sales = get_active_flash_sales()
+    sales_by_coupon = {sale.coupon_name: sale for sale in flash_sales}
 
     if not options:
         await message.answer(
@@ -525,6 +450,13 @@ async def buy_coupons(message: Message):
     lines = []
 
     for option in options[:12]:
+        sale = sales_by_coupon.get(option["coupon_name"])
+        option["flash_sale"] = bool(sale)
+        sale_line = (
+            f"\nSALE: <b>{escape(sale.title)}</b> - <i>{escape(sale.discount_text)}</i>"
+            if sale
+            else ""
+        )
         lines.append(
             f"🎟 <code>{escape(option['coupon_name'])}</code>\n"
             f"💎 Rs {option['discount']} OFF • Min Rs {option['minimum']}\n"
@@ -537,6 +469,18 @@ async def buy_coupons(message: Message):
         "<i>Cutie says: tap a deal and I will prepare it fast.</i>",
         reply_markup=coupon_list_keyboard(options[:12]),
     )
+
+
+    if flash_sales:
+        sale_lines = [
+            f"SALE: <b>{escape(sale.title)}</b> - <code>{escape(sale.coupon_name)}</code> - <i>{escape(sale.discount_text)}</i>"
+            for sale in flash_sales
+        ]
+        await message.answer(
+            "<b>FlashX Sale</b>\n\n"
+            f"<blockquote>{chr(10).join(sale_lines)}</blockquote>\n\n"
+            "<i>Choose the matching coupon above to use this sale stock.</i>"
+        )
 
 
 @dp.callback_query(F.data.startswith("buy_type_"))
@@ -673,7 +617,7 @@ async def finalize_paid_order(order_id, bot: Bot):
         return True, "Already delivered."
 
     if order.coupon_name == "WALLET_TOPUP":
-        add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
+        add_wallet_credit_once(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
         update_order_status(order_id, "SUCCESS")
         update_delivery_status(order_id, "DELIVERED")
 
@@ -698,6 +642,7 @@ async def finalize_paid_order(order_id, bot: Bot):
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
+    save_order_coupon_code(order_id, coupon_code)
     reward_referral_if_needed(order.user_id, 1)
 
     if should_send_stock_alert(remaining_stock):
@@ -722,6 +667,14 @@ async def finalize_paid_order(order_id, bot: Bot):
             f"🎟 Coupon Code:\n<code>{coupon_code}</code></blockquote>\n\n"
             "<i>Cutie delivered it for you.</i>"
         ),
+    )
+    await bot.send_message(
+        chat_id=order.user_id,
+        text=(
+            "<b>How was this purchase?</b>\n\n"
+            "<blockquote>Your feedback becomes Cutie AI memory so the bot can improve future support.</blockquote>"
+        ),
+        reply_markup=feedback_keyboard(order.order_id),
     )
     return True, coupon_code
 
@@ -815,6 +768,65 @@ async def cancel_order(callback: CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data.startswith("feedback_"))
+async def feedback_rating(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.answer("Invalid feedback.")
+        return
+
+    order_id = parts[1]
+    try:
+        rating = int(parts[2])
+    except ValueError:
+        rating = 0
+
+    order = get_order_by_id(order_id)
+    if not order or str(order.user_id) != str(callback.from_user.id):
+        await callback.answer("Feedback does not match your order.", show_alert=True)
+        return
+
+    if rating <= 0:
+        add_feedback(callback.from_user.id, order_id, 0, "Skipped written feedback")
+        await callback.message.answer(
+            "<b>Feedback skipped.</b>\n\n"
+            "<blockquote>Cutie still remembers that this order completed.</blockquote>"
+        )
+        await callback.answer()
+        return
+
+    await state.update_data(order_id=order_id, rating=rating)
+    await state.set_state(FeedbackState.waiting_for_message)
+    await callback.message.answer(
+        "<b>Tell Cutie one line</b>\n\n"
+        f"<blockquote>Rating saved: <b>{rating}/5</b>\n"
+        "Send what felt good or what should improve.</blockquote>"
+    )
+    await callback.answer()
+
+
+@dp.message(FeedbackState.waiting_for_message)
+async def feedback_message(message: Message, state: FSMContext):
+    data = await state.get_data()
+    order_id = data.get("order_id")
+    rating = int(data.get("rating") or 0)
+    feedback_text = (message.text or "").strip()
+
+    feedback_id = add_feedback(message.from_user.id, order_id, rating, feedback_text)
+    if feedback_id:
+        await message.answer(
+            "<b>Feedback saved.</b>\n\n"
+            "<blockquote>Cutie AI added this to bot memory for future support and improvements.</blockquote>"
+        )
+    else:
+        await message.answer(
+            "<b>Feedback could not be saved.</b>\n\n"
+            "<blockquote>Your order is still completed. Please try feedback again later.</blockquote>"
+        )
+
+    await state.clear()
+
+
 @dp.callback_query(F.data.startswith("stock_alert_"))
 async def stock_alert_callback(callback: CallbackQuery):
     coupon_name = callback.data.replace("stock_alert_", "") or "ALL"
@@ -852,6 +864,9 @@ async def my_orders(message: Message):
         )
 
     await message.answer(text)
+
+
+
 
 
 @dp.message(F.text == BTN_PROFILE)

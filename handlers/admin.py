@@ -12,6 +12,7 @@ from database.crud import (
     add_coupon,
     add_ticket_reply,
     add_wallet_credit,
+    add_wallet_credit_once,
     audit_admin_action,
     ban_user,
     close_ticket,
@@ -22,6 +23,7 @@ from database.crud import (
     get_all_user_ids,
     get_analytics_snapshot,
     get_recent_audit_logs,
+    get_recent_feedback,
     get_open_tickets,
     get_ticket_by_id,
     get_order_by_id,
@@ -37,11 +39,15 @@ from database.crud import (
     get_total_users,
     get_coupon_stock,
     get_wallet_balance,
+    get_wallet_dashboard_snapshot,
+    get_recent_successful_purchases,
+    get_recent_wallet_transactions,
     is_user_banned,
     set_bot_setting,
     unban_user,
     update_coupon_price,
     reset_platform_data,
+    save_order_coupon_code,
 )
 from services.coupon_service import deliver_coupon
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
@@ -89,6 +95,15 @@ from texts import (
 router = Router()
 
 
+async def send_progress_messages(message: Message, frames, delay=0.4):
+    for text in frames:
+        try:
+            await message.answer(text)
+        except Exception:
+            pass
+        await asyncio.sleep(delay)
+
+
 async def broadcast_launch_effect(message: Message):
     frames = [
         "📣 <b>Broadcasting</b>\n\n<blockquote>🔴 Starting transmission...</blockquote>",
@@ -96,23 +111,7 @@ async def broadcast_launch_effect(message: Message):
         "📣 <b>Broadcasting</b>\n\n<blockquote>🟡 Sending message...</blockquote>",
         "📣 <b>Broadcasting</b>\n\n<blockquote>🟢 Delivered!</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.4)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def low_stock_effect(message: Message, count: int):
@@ -121,23 +120,7 @@ async def low_stock_effect(message: Message, count: int):
         f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>🔴 LOW STOCK DETECTED\nCritical items: <b>{count}</b></blockquote>",
         f"🚨 <b>Low Stock Alert</b>\n\n<blockquote>✅ Alert sent to admin\nCritical items: <b>{count}</b></blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.4)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def admin_boot_effect(message: Message):
@@ -146,23 +129,7 @@ async def admin_boot_effect(message: Message):
         "🔐 <b>Control Center</b>\n\n<blockquote>🟢 Loading dashboard...</blockquote>",
         "🔐 <b>Control Center</b>\n\n<blockquote>✅ Admin mode activated</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.4)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def admin_sync_effect(message: Message, title="Admin sync"):
@@ -171,23 +138,7 @@ async def admin_sync_effect(message: Message, title="Admin sync"):
         f"⚡ <b>{title}</b>\n\n<blockquote>⏳ Syncing data...</blockquote>",
         f"✅ <b>{title}</b>\n\n<blockquote>✅ Complete!</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.4)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 async def inventory_scan_effect(message: Message):
@@ -196,23 +147,7 @@ async def inventory_scan_effect(message: Message):
         "📦 <b>Inventory Scan</b>\n\n<blockquote>📊 Analyzing data...</blockquote>",
         "📦 <b>Inventory Scan</b>\n\n<blockquote>✅ Inventory loaded</blockquote>",
     ]
-    frame = None
-    for text in frames:
-        if frame:
-            try:
-                await frame.edit_text(text)
-            except Exception:
-                pass
-        else:
-            frame = await message.answer(text)
-        await asyncio.sleep(0.4)
-    
-    if frame:
-        await asyncio.sleep(0.5)
-        try:
-            await frame.delete()
-        except Exception:
-            pass
+    await send_progress_messages(message, frames)
 
 
 def is_admin(message: Message):
@@ -387,6 +322,11 @@ async def analytics(message: Message):
 
     await admin_sync_effect(message, "Analytics sync")
     data = get_analytics_snapshot()
+    feedbacks = get_recent_feedback(limit=5)
+    feedback_lines = [
+        f"<code>{item.user_id}</code> - Order <code>{item.order_id or 'N/A'}</code> - {item.rating}/5 - {escape(item.message or '')}"
+        for item in feedbacks
+    ]
     await message.answer(
         "📈 <b>Analytics</b>\n\n"
         f"<blockquote>Revenue: <b>Rs {data['revenue']}</b>\n"
@@ -395,7 +335,20 @@ async def analytics(message: Message):
         f"Pending: <b>{data['pending_orders']}</b>\n"
         f"Conversion: <b>{data['conversion']}%</b>\n"
         f"Users: <b>{data['total_users']}</b>\n"
-        f"Available Coupons: <b>{data['available_coupons']}</b></blockquote>"
+        f"Available Coupons: <b>{data['available_coupons']}</b>\n\n"
+        f"Wallet Top Ups: <b>Rs {data['wallet_topups']}</b>\n"
+        f"Top Up Count: <b>{data['wallet_topup_count']}</b>\n"
+        f"Wallet Users: <b>{data['wallet_users']}</b>\n"
+        f"Average Top Up: <b>Rs {data['wallet_average_topup']}</b>\n"
+        f"Wallet Spend: <b>Rs {data['wallet_spent']}</b>\n"
+        f"Current Wallet Liability: <b>Rs {data['wallet_balance']}</b></blockquote>"
+    )
+
+
+    await message.answer(
+        "<b>Recent Feedback Memory</b>\n\n"
+        f"<blockquote>{chr(10).join(feedback_lines) if feedback_lines else 'No feedback saved yet.'}</blockquote>\n\n"
+        "<i>Use /feedbacks for a longer list.</i>"
     )
 
 
@@ -437,6 +390,24 @@ async def payments(message: Message):
     )
 
 
+    wallet = get_wallet_dashboard_snapshot()
+    recent_wallet = get_recent_wallet_transactions(limit=5)
+    wallet_lines = [
+        f"<code>{tx.user_id}</code> {'+' if tx.amount >= 0 else '-'}Rs {abs(tx.amount)} - {escape(tx.reason or 'Wallet update')}"
+        for tx in recent_wallet
+    ]
+    await message.answer(
+        "<b>Wallet Revenue Dashboard</b>\n\n"
+        f"<blockquote>Total Top Ups: <b>Rs {wallet['topup_total']}</b>\n"
+        f"Top Up Count: <b>{wallet['topup_count']}</b>\n"
+        f"Users With Credits: <b>{wallet['credited_users']}</b>\n"
+        f"Average Top Up: <b>Rs {wallet['average_topup']}</b>\n"
+        f"Wallet Spent: <b>Rs {wallet['total_spent']}</b>\n"
+        f"Current Wallet Liability: <b>Rs {wallet['wallet_balance']}</b></blockquote>\n\n"
+        f"<blockquote>{chr(10).join(wallet_lines) if wallet_lines else 'No wallet transactions yet.'}</blockquote>"
+    )
+
+
 @router.message(F.text == BTN_ORDERS)
 async def orders(message: Message):
     if not is_admin(message):
@@ -449,6 +420,22 @@ async def orders(message: Message):
         f"✅ Completed: <b>{get_completed_orders()}</b>\n"
         f"❌ Failed: <b>{get_failed_orders()}</b>\n"
         f"🚫 Cancelled: <b>{get_cancelled_orders()}</b></blockquote>"
+    )
+
+
+    purchases = get_recent_successful_purchases(limit=10)
+    purchase_lines = []
+    for order in purchases:
+        code = order.coupon_code or "not saved for old order"
+        purchase_lines.append(
+            f"User <code>{order.user_id}</code> bought <code>{escape(order.coupon_name)}</code>\n"
+            f"Order <code>{order.order_id}</code> - Rs {order.amount} - Wallet Rs {order.wallet_used or 0}\n"
+            f"Code: <code>{escape(code)}</code>"
+        )
+
+    await message.answer(
+        "<b>Recent Buyers</b>\n\n"
+        f"<blockquote>{chr(10).join(purchase_lines) if purchase_lines else 'No successful purchases yet.'}</blockquote>"
     )
 
 
@@ -915,6 +902,8 @@ async def backup(message: Message):
     backup_dir.mkdir(parents=True, exist_ok=True)
     coupons_path = backup_dir / "coupons_backup.csv"
     orders_path = backup_dir / "orders_backup.csv"
+    wallet_path = backup_dir / "wallet_transactions_backup.csv"
+    feedback_path = backup_dir / "feedback_backup.csv"
 
     with coupons_path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
@@ -926,9 +915,20 @@ async def backup(message: Message):
         writer.writerow(["order_id", "user_id", "coupon", "amount", "payment", "delivery", "created"])
         writer.writerows(rows["orders"])
 
+    with wallet_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["id", "user_id", "amount", "reason", "created"])
+        writer.writerows(rows["wallet_transactions"])
+
+    with feedback_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["id", "user_id", "order_id", "rating", "message", "created"])
+        writer.writerows(rows["feedbacks"])
+
     await message.answer(
         "📤 <b>Backup created.</b>\n\n"
-        f"<blockquote><code>{coupons_path}</code>\n<code>{orders_path}</code></blockquote>"
+        f"<blockquote><code>{coupons_path}</code>\n<code>{orders_path}</code>\n"
+        f"<code>{wallet_path}</code>\n<code>{feedback_path}</code></blockquote>"
     )
     audit_admin_action(message.from_user.id, "backup", "csv")
 
@@ -946,6 +946,23 @@ async def audit_logs(message: Message):
     await message.answer(
         "🧾 <b>Audit Logs</b>\n\n"
         f"<blockquote>{chr(10).join(lines) if lines else 'No audit logs yet.'}</blockquote>"
+    )
+
+
+@router.message(F.text == "/feedbacks")
+async def feedbacks_report(message: Message):
+    if not is_admin(message):
+        return
+
+    feedbacks = get_recent_feedback(limit=20)
+    lines = [
+        f"<code>{item.user_id}</code> - Order <code>{item.order_id or 'N/A'}</code> - {item.rating}/5\n"
+        f"{escape(item.message or 'No written comment')}"
+        for item in feedbacks
+    ]
+    await message.answer(
+        "<b>Cutie Feedback Memory</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No feedback saved yet.'}</blockquote>"
     )
 
 
@@ -1053,7 +1070,11 @@ async def retry_delivery(message: Message, bot: Bot):
         return
 
     if order.coupon_name == "WALLET_TOPUP":
-        add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
+        if order.delivery_status == "DELIVERED":
+            await message.answer("âœ… <b>Wallet top up was already delivered.</b>")
+            return
+
+        add_wallet_credit_once(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
         update_order_status(order_id, "SUCCESS")
         update_delivery_status(order_id, "DELIVERED")
         balance = get_wallet_balance(order.user_id)
@@ -1077,6 +1098,7 @@ async def retry_delivery(message: Message, bot: Bot):
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
+    save_order_coupon_code(order_id, coupon_code)
 
     if should_send_stock_alert(remaining_stock):
         await notify_stock_alerts(

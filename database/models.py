@@ -30,6 +30,12 @@ class User(Base):
 
     username = Column(String(100))
 
+    # Streak tracking fields
+    streak_count = Column(Integer, default=0)
+    last_login_at = Column(DateTime, nullable=True)
+    claimed_15 = Column(Boolean, default=False)
+    claimed_30 = Column(Boolean, default=False)
+
     joined_at = Column(
         DateTime,
         default=datetime.utcnow
@@ -131,6 +137,27 @@ class FlashSale(Base):
     discount_text = Column(String(255))
     active = Column(Boolean, default=True)
     expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    order_id = Column(String(50), nullable=True)
+    rating = Column(Integer, default=0)
+    message = Column(String(1000), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LoginOTP(Base):
+    __tablename__ = "login_otps"
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger)
+    code = Column(String(16))
+    expires_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
