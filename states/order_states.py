@@ -55,10 +55,6 @@ class WalletTopUpState(StatesGroup):
     waiting_for_amount = State()
 
 
-class FeedbackState(StatesGroup):
-    waiting_for_message = State()
-
-
 class FlashSaleState(StatesGroup):
     waiting_for_coupon_name = State()
     waiting_for_title = State()

@@ -4,7 +4,6 @@ from database.models import (
     BannedUser,
     BotSetting,
     Coupon,
-    Feedback,
     FlashSale,
     Order,
     Referral,
@@ -16,139 +15,6 @@ from database.models import (
 from sqlalchemy import text, MetaData
 
 import uuid
-from datetime import datetime, timedelta
-
-
-def get_user_by_telegram_id(telegram_id):
-    db = SessionLocal()
-
-    try:
-        return db.query(User).filter(User.telegram_id == telegram_id).first()
-
-    finally:
-        db.close()
-
-
-
-def update_user_login_streak(telegram_id):
-    db = SessionLocal()
-
-    try:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        now = datetime.utcnow()
-
-        if not user:
-            # create user entry
-            user = User(telegram_id=telegram_id, username=None, streak_count=1, last_login_at=now)
-            db.add(user)
-            db.commit()
-            return {"streak": 1, "milestone": None}
-
-        # already logged today?
-        last = user.last_login_at
-        if last and last.date() == now.date():
-            return {"streak": user.streak_count, "milestone": None}
-
-        # if last was yesterday -> increment, else reset to 1
-        if last and (now.date() - last.date()).days == 1:
-            user.streak_count = (user.streak_count or 0) + 1
-        else:
-            user.streak_count = 1
-
-        user.last_login_at = now
-
-        # determine milestone
-        milestone = None
-        if user.streak_count == 15 and not user.claimed_15:
-            milestone = 15
-        if user.streak_count == 30 and not user.claimed_30:
-            milestone = 30
-
-        db.commit()
-        return {"streak": user.streak_count, "milestone": milestone}
-
-    except Exception as e:
-        db.rollback()
-        print("streak update error:", e)
-        return None
-
-    finally:
-        db.close()
-
-
-def get_eligible_coupons(max_price=None, limit=20):
-    db = SessionLocal()
-
-    try:
-        q = db.query(Coupon).filter(Coupon.sold == False)
-        if max_price is not None:
-            q = q.filter(Coupon.selling_price < max_price)
-        return q.order_by(Coupon.id).limit(limit).all()
-
-    finally:
-        db.close()
-
-
-def claim_coupon_for_user(coupon_id, telegram_id):
-    db = SessionLocal()
-
-    try:
-        coupon = db.query(Coupon).filter(Coupon.id == coupon_id, Coupon.sold == False).first()
-        if not coupon:
-            return None
-
-        coupon.sold = True
-
-        # create a reward order for tracking
-        order = Order(
-            order_id = "RB" + uuid.uuid4().hex[:10].upper(),
-            user_id = telegram_id,
-            coupon_name = coupon.coupon_name,
-            coupon_code = coupon.coupon_code,
-            amount = 0,
-            wallet_used = 0,
-            payable_amount = 0,
-            payment_status = "REWARD",
-            delivery_status = "DELIVERED"
-        )
-        db.add(order)
-        db.commit()
-
-        return coupon.coupon_code
-
-    except Exception as e:
-        db.rollback()
-        print("claim coupon error:", e)
-        return None
-
-    finally:
-        db.close()
-
-
-def mark_milestone_claimed(telegram_id, milestone):
-    db = SessionLocal()
-
-    try:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        if not user:
-            return False
-
-        if milestone == 15:
-            user.claimed_15 = True
-        elif milestone == 30:
-            user.claimed_30 = True
-        else:
-            return False
-
-        db.commit()
-        return True
-
-    except Exception:
-        db.rollback()
-        return False
-
-    finally:
-        db.close()
 
 
 def track_user(telegram_id, username=None):
@@ -386,40 +252,6 @@ def add_wallet_credit(user_id, amount, reason):
         db.close()
 
 
-def add_wallet_credit_once(user_id, amount, reason):
-    db = SessionLocal()
-
-    try:
-        existing = (
-            db.query(WalletTransaction)
-            .filter(
-                WalletTransaction.user_id == user_id,
-                WalletTransaction.reason == reason,
-            )
-            .first()
-        )
-
-        if existing:
-            return False
-
-        db.add(
-            WalletTransaction(
-                user_id=user_id,
-                amount=amount,
-                reason=reason,
-            )
-        )
-        db.commit()
-        return True
-
-    except Exception:
-        db.rollback()
-        return False
-
-    finally:
-        db.close()
-
-
 def get_wallet_balance(user_id):
     db = SessionLocal()
 
@@ -442,52 +274,6 @@ def get_wallet_transactions(user_id, limit=10):
         return (
             db.query(WalletTransaction)
             .filter(WalletTransaction.user_id == user_id)
-            .order_by(WalletTransaction.id.desc())
-            .limit(limit)
-            .all()
-        )
-
-    finally:
-        db.close()
-
-
-def get_wallet_dashboard_snapshot():
-    db = SessionLocal()
-
-    try:
-        transactions = db.query(WalletTransaction).all()
-        deposits = [tx for tx in transactions if (tx.amount or 0) > 0]
-        spends = [tx for tx in transactions if (tx.amount or 0) < 0]
-        topups = [
-            tx for tx in deposits
-            if "top up" in (tx.reason or "").lower()
-        ]
-        credited_users = {tx.user_id for tx in deposits}
-
-        total_deposited = sum(tx.amount or 0 for tx in deposits)
-        total_spent = abs(sum(tx.amount or 0 for tx in spends))
-        total_topups = sum(tx.amount or 0 for tx in topups)
-
-        return {
-            "wallet_balance": sum(tx.amount or 0 for tx in transactions),
-            "total_deposited": total_deposited,
-            "total_spent": total_spent,
-            "topup_total": total_topups,
-            "topup_count": len(topups),
-            "credited_users": len(credited_users),
-            "average_topup": round(total_topups / len(topups), 2) if topups else 0,
-        }
-
-    finally:
-        db.close()
-
-
-def get_recent_wallet_transactions(limit=10):
-    db = SessionLocal()
-
-    try:
-        return (
-            db.query(WalletTransaction)
             .order_by(WalletTransaction.id.desc())
             .limit(limit)
             .all()
@@ -911,83 +697,6 @@ def get_active_flash_sales(limit=5):
         db.close()
 
 
-def get_active_flash_sale_for_coupon(coupon_name):
-    db = SessionLocal()
-
-    try:
-        now = datetime.utcnow()
-        return (
-            db.query(FlashSale)
-            .filter(
-                FlashSale.coupon_name == coupon_name,
-                FlashSale.active == True,
-            )
-            .filter(
-                (FlashSale.expires_at == None)
-                | (FlashSale.expires_at > now)
-            )
-            .order_by(FlashSale.id.desc())
-            .first()
-        )
-
-    finally:
-        db.close()
-
-
-def add_feedback(user_id, order_id, rating, message):
-    db = SessionLocal()
-
-    try:
-        feedback = Feedback(
-            user_id=user_id,
-            order_id=order_id,
-            rating=rating,
-            message=(message or "")[:1000],
-        )
-        db.add(feedback)
-        db.commit()
-        return feedback.id
-
-    except Exception:
-        db.rollback()
-        return None
-
-    finally:
-        db.close()
-
-
-def get_recent_feedback(limit=10):
-    db = SessionLocal()
-
-    try:
-        return (
-            db.query(Feedback)
-            .order_by(Feedback.id.desc())
-            .limit(limit)
-            .all()
-        )
-
-    finally:
-        db.close()
-
-
-def get_feedback_memory_summary(limit=8):
-    feedbacks = get_recent_feedback(limit)
-
-    if not feedbacks:
-        return "No user feedback memory yet."
-
-    lines = []
-    for item in feedbacks:
-        stars = f"{item.rating}/5" if item.rating else "no rating"
-        message = (item.message or "").strip() or "No written comment"
-        lines.append(
-            f"Order {item.order_id or 'N/A'} from user {item.user_id}: {stars} - {message[:160]}"
-        )
-
-    return "\n".join(lines)
-
-
 def get_analytics_snapshot():
     db = SessionLocal()
 
@@ -1016,7 +725,6 @@ def get_analytics_snapshot():
             .filter(Order.payment_status == "SUCCESS")
             .all()
         )
-        wallet = get_wallet_dashboard_snapshot()
 
         conversion = (
             round((success_orders / total_orders) * 100, 2)
@@ -1033,13 +741,6 @@ def get_analytics_snapshot():
             "available_coupons": available_coupons,
             "revenue": revenue,
             "conversion": conversion,
-            "wallet_balance": wallet["wallet_balance"],
-            "wallet_deposited": wallet["total_deposited"],
-            "wallet_spent": wallet["total_spent"],
-            "wallet_topups": wallet["topup_total"],
-            "wallet_topup_count": wallet["topup_count"],
-            "wallet_average_topup": wallet["average_topup"],
-            "wallet_users": wallet["credited_users"],
         }
 
     finally:
@@ -1052,8 +753,6 @@ def export_backup_rows():
     try:
         coupons = db.query(Coupon).order_by(Coupon.id.asc()).all()
         orders = db.query(Order).order_by(Order.id.asc()).all()
-        wallet_transactions = db.query(WalletTransaction).order_by(WalletTransaction.id.asc()).all()
-        feedbacks = db.query(Feedback).order_by(Feedback.id.asc()).all()
 
         return {
             "coupons": [
@@ -1079,27 +778,6 @@ def export_backup_rows():
                     o.created_at,
                 ]
                 for o in orders
-            ],
-            "wallet_transactions": [
-                [
-                    tx.id,
-                    tx.user_id,
-                    tx.amount,
-                    tx.reason,
-                    tx.created_at,
-                ]
-                for tx in wallet_transactions
-            ],
-            "feedbacks": [
-                [
-                    item.id,
-                    item.user_id,
-                    item.order_id,
-                    item.rating,
-                    item.message,
-                    item.created_at,
-                ]
-                for item in feedbacks
             ],
         }
 
@@ -1485,38 +1163,6 @@ def get_user_orders(user_id):
     finally:
         db.close()        
 
-
-def get_recent_orders(limit=15):
-    db = SessionLocal()
-
-    try:
-        return (
-            db.query(Order)
-            .order_by(Order.id.desc())
-            .limit(limit)
-            .all()
-        )
-
-    finally:
-        db.close()
-
-
-def get_recent_successful_purchases(limit=15):
-    db = SessionLocal()
-
-    try:
-        return (
-            db.query(Order)
-            .filter(Order.payment_status == "SUCCESS")
-            .order_by(Order.id.desc())
-            .limit(limit)
-            .all()
-        )
-
-    finally:
-        db.close()
-
-
 def get_unsold_coupon(coupon_name):
     db = SessionLocal()
 
@@ -1717,31 +1363,6 @@ def update_delivery_status(
 
     finally:
         db.close()        
-
-
-def save_order_coupon_code(order_id, coupon_code):
-    db = SessionLocal()
-
-    try:
-        order = (
-            db.query(Order)
-            .filter(Order.order_id == order_id)
-            .first()
-        )
-
-        if not order:
-            return False
-
-        order.coupon_code = coupon_code
-        db.commit()
-        return True
-
-    except Exception:
-        db.rollback()
-        return False
-
-    finally:
-        db.close()
 
 def save_payment_session(
     order_id,
