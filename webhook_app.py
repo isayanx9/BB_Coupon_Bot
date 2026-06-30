@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import text
 
 from config import (
@@ -20,17 +21,43 @@ from database.crud import (
     get_coupon_summary,
     get_open_tickets,
     get_order_by_id,
+    get_bot_setting,
     get_payment_session,
     get_recent_audit_logs,
     get_wallet_balance,
+    refund_order_wallet_if_needed,
+    save_order_coupon_code,
     update_delivery_status,
     update_order_status,
 )
 import database.db as database_db
-from services.coupon_service import deliver_coupon
+from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 
 app = FastAPI()
+
+
+def get_order_quantity(order_id):
+    value = get_bot_setting(f"order_quantity:{order_id}", "1")
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1
+
+
+def feedback_keyboard(order_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1", callback_data=f"feedback_{order_id}_1"),
+                InlineKeyboardButton(text="2", callback_data=f"feedback_{order_id}_2"),
+                InlineKeyboardButton(text="3", callback_data=f"feedback_{order_id}_3"),
+                InlineKeyboardButton(text="4", callback_data=f"feedback_{order_id}_4"),
+                InlineKeyboardButton(text="5", callback_data=f"feedback_{order_id}_5"),
+            ],
+            [InlineKeyboardButton(text="Skip", callback_data=f"feedback_{order_id}_0")],
+        ]
+    )
 
 
 def web_admin_allowed(token):
@@ -382,10 +409,13 @@ async def cashfree_webhook(request: Request):
                     await bot.session.close()
                     return JSONResponse({"success": True, "wallet_topup": True})
 
-                coupon_code, remaining_stock = deliver_coupon(order.coupon_name)
+                quantity = get_order_quantity(order_id)
+                coupon_codes, remaining_stock = deliver_coupons(order.coupon_name, quantity)
+                coupon_code = "\n".join(coupon_codes)
 
-                if coupon_code:
+                if len(coupon_codes) == quantity:
                     update_delivery_status(order_id, "DELIVERED")
+                    save_order_coupon_code(order_id, ", ".join(coupon_codes))
 
                     bot = Bot(
                         token=BOT_TOKEN,
@@ -410,9 +440,19 @@ async def cashfree_webhook(request: Request):
                             "<i>Cutie delivered it for you. Thank you for purchasing.</i>"
                         ),
                     )
+                    await bot.send_message(
+                        chat_id=order.user_id,
+                        text=(
+                            "<b>How was this purchase?</b>\n\n"
+                            "<blockquote>Your feedback helps train and improve Cutie AI support.</blockquote>"
+                        ),
+                        reply_markup=feedback_keyboard(order.order_id),
+                    )
 
                     await bot.session.close()
                     print(f"Coupon delivered: {coupon_code}")
+                else:
+                    refund_order_wallet_if_needed(order_id, "Delivery refund")
 
         return JSONResponse({"success": True})
 

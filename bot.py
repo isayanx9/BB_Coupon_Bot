@@ -17,12 +17,14 @@ from config import (
     require_env,
 )
 from database.crud import (
+    add_feedback,
     add_wallet_credit,
     create_order,
     create_referral,
     create_support_ticket,
     delete_bot_setting,
     get_bot_setting,
+    get_bulk_buyer_price,
     get_coupon_by_id,
     get_coupon_stock,
     get_coupon_type_options,
@@ -34,6 +36,7 @@ from database.crud import (
     is_user_banned,
     refund_order_wallet_if_needed,
     reward_referral_if_needed,
+    save_order_coupon_code,
     save_payment_session,
     set_bot_setting,
     subscribe_stock_alert,
@@ -48,9 +51,9 @@ from handlers.admin import router as admin_router
 from keyboards.shop import coupon_list_keyboard, payment_keyboard
 from keyboards.user import admin_main_menu, join_keyboard, terms_keyboard, user_main_menu
 from services.ai_assistant import get_ai_answer
-from services.coupon_service import deliver_coupon
+from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
-from states.order_states import AIAssist, SupportTicketState, WalletTopUpState
+from states.order_states import AIAssist, FeedbackState, PurchaseQuantityState, SupportTicketState, WalletTopUpState
 from texts import (
     BOT_USERNAME,
     BTN_ACCESS_LOG,
@@ -88,6 +91,29 @@ def format_payment_error(data):
     return (
         f"Code: <code>{escape(str(code))}</code>\n"
         f"Message: <i>{escape(str(message))}</i>"
+    )
+
+
+def get_order_quantity(order_id):
+    value = get_bot_setting(f"order_quantity:{order_id}", "1")
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1
+
+
+def feedback_keyboard(order_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1", callback_data=f"feedback_{order_id}_1"),
+                InlineKeyboardButton(text="2", callback_data=f"feedback_{order_id}_2"),
+                InlineKeyboardButton(text="3", callback_data=f"feedback_{order_id}_3"),
+                InlineKeyboardButton(text="4", callback_data=f"feedback_{order_id}_4"),
+                InlineKeyboardButton(text="5", callback_data=f"feedback_{order_id}_5"),
+            ],
+            [InlineKeyboardButton(text="Skip", callback_data=f"feedback_{order_id}_0")],
+        ]
     )
 
 
@@ -540,7 +566,7 @@ async def buy_coupons(message: Message):
 
 
 @dp.callback_query(F.data.startswith("buy_type_"))
-async def buy_coupon_type(callback: CallbackQuery, bot: Bot):
+async def buy_coupon_type(callback: CallbackQuery, state: FSMContext):
     if is_user_banned(callback.from_user.id):
         await callback.answer("Access blocked.", show_alert=True)
         return
@@ -561,6 +587,26 @@ async def buy_coupon_type(callback: CallbackQuery, bot: Bot):
         await callback.message.answer("😔 <b>Out of stock.</b>")
         await callback.answer()
         return
+
+    stock = get_coupon_stock(coupon.coupon_name)
+    special_price = get_bulk_buyer_price(callback.from_user.id, coupon.coupon_name)
+    unit_price = special_price if special_price is not None else coupon.selling_price
+
+    await state.update_data(
+        coupon_id=coupon.id,
+        unit_price=unit_price,
+    )
+    await state.set_state(PurchaseQuantityState.waiting_for_quantity)
+    await callback.message.answer(
+        "🛒 <b>Select Quantity</b>\n\n"
+        f"<blockquote>Coupon: <code>{escape(coupon.coupon_name)}</code>\n"
+        f"Available Stock: <b>{stock}</b>\n"
+        f"Your Price: <b>Rs {unit_price}</b>"
+        f"{' ⭐ special buyer price' if special_price is not None else ''}</blockquote>\n\n"
+        "Send how many coupons you want to buy."
+    )
+    await callback.answer()
+    return
 
     order_id = create_order(callback.from_user.id, coupon.coupon_name, coupon.selling_price, use_wallet=True)
 
@@ -600,6 +646,82 @@ async def buy_coupon_type(callback: CallbackQuery, bot: Bot):
         reply_markup=payment_keyboard(order_id),
     )
     await callback.answer()
+
+
+@dp.message(PurchaseQuantityState.waiting_for_quantity)
+async def purchase_quantity(message: Message, state: FSMContext, bot: Bot):
+    if await reject_if_banned(message):
+        return
+
+    try:
+        quantity = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Send a number only, example: <code>3</code>")
+        return
+
+    data = await state.get_data()
+    coupon = get_coupon_by_id(int(data.get("coupon_id")))
+
+    if quantity <= 0:
+        await message.answer("Quantity must be a positive number.")
+        return
+
+    if not coupon or coupon.sold:
+        await message.answer("😔 <b>This coupon is no longer available. Open Deal Vault again.</b>")
+        await state.clear()
+        return
+
+    live_stock = get_coupon_stock(coupon.coupon_name)
+    if live_stock < quantity:
+        await message.answer(
+            "😔 <b>Stock changed.</b>\n\n"
+            f"<blockquote>Available now: <b>{live_stock}</b>. Send a lower quantity.</blockquote>"
+        )
+        return
+
+    unit_price = int(data.get("unit_price") or coupon.selling_price)
+    total_amount = unit_price * quantity
+    order_id = create_order(message.from_user.id, coupon.coupon_name, total_amount, use_wallet=True)
+
+    if not order_id:
+        await message.answer(
+            "💔 <b>Order creation failed.</b>\n\n"
+            "<blockquote>Please try again or contact support.</blockquote>"
+        )
+        await state.clear()
+        return
+
+    set_bot_setting(f"order_quantity:{order_id}", str(quantity))
+    set_bot_setting(f"order_unit_price:{order_id}", str(unit_price))
+
+    order = get_order_by_id(order_id)
+    payable_amount = order.payable_amount if order else total_amount
+    wallet_used = order.wallet_used if order else 0
+
+    if payable_amount == 0:
+        delivered, detail = await finalize_paid_order(order_id, bot)
+        if not delivered:
+            await message.answer(
+                "⚠️ <b>Wallet purchase needs admin support.</b>\n\n"
+                f"<blockquote>{escape(detail)}</blockquote>"
+            )
+        else:
+            await message.answer("✅ <b>Coupons paid from wallet credits.</b>")
+        await state.clear()
+        return
+
+    await message.answer(
+        "✨ <b>Order Created</b>\n\n"
+        f"<blockquote>🆔 Order ID: <code>{order_id}</code>\n"
+        f"🎟 Coupon: <code>{escape(coupon.coupon_name)}</code>\n"
+        f"Quantity: <b>{quantity}</b>\n"
+        f"Unit Price: <b>Rs {unit_price}</b>\n"
+        f"💰 Amount: <b>Rs {total_amount}</b>\n"
+        f"💎 Wallet Used: <b>Rs {wallet_used}</b>\n"
+        f"⏳ Pay Now: <i>Rs {payable_amount}</i></blockquote>",
+        reply_markup=payment_keyboard(order_id),
+    )
+    await state.clear()
 
 
 @dp.callback_query(F.data.startswith("pay_"))
@@ -690,11 +812,16 @@ async def finalize_paid_order(order_id, bot: Bot):
         )
         return True, "Wallet topped up"
 
-    coupon_code, remaining_stock = deliver_coupon(order.coupon_name)
+    quantity = get_order_quantity(order_id)
+    coupon_codes, remaining_stock = deliver_coupons(order.coupon_name, quantity)
 
-    if not coupon_code:
+    if len(coupon_codes) < quantity:
         refund_order_wallet_if_needed(order_id, "Delivery refund")
-        return False, "No unsold coupon stock available for this order."
+        return False, "Not enough unsold coupon stock available for this order."
+
+    delivered_codes = "\n".join(coupon_codes)
+    coupon_code = delivered_codes
+    save_order_coupon_code(order_id, ", ".join(coupon_codes))
 
     update_order_status(order_id, "SUCCESS")
     update_delivery_status(order_id, "DELIVERED")
@@ -723,7 +850,15 @@ async def finalize_paid_order(order_id, bot: Bot):
             "<i>Cutie delivered it for you.</i>"
         ),
     )
-    return True, coupon_code
+    await bot.send_message(
+        chat_id=order.user_id,
+        text=(
+            "<b>How was this purchase?</b>\n\n"
+            "<blockquote>Your feedback helps train and improve Cutie AI support.</blockquote>"
+        ),
+        reply_markup=feedback_keyboard(order.order_id),
+    )
+    return True, ", ".join(coupon_codes)
 
 
 @dp.callback_query(F.data.startswith("recheck_"))
@@ -813,6 +948,60 @@ async def cancel_order(callback: CallbackQuery):
         + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
     )
     await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("feedback_"))
+async def feedback_rating(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.answer("Invalid feedback.")
+        return
+
+    order_id = parts[1]
+    try:
+        rating = int(parts[2])
+    except ValueError:
+        rating = 0
+
+    order = get_order_by_id(order_id)
+    if not order or str(order.user_id) != str(callback.from_user.id):
+        await callback.answer("Feedback does not match your order.", show_alert=True)
+        return
+
+    if rating <= 0:
+        add_feedback(callback.from_user.id, order_id, 0, "Skipped written feedback")
+        await callback.message.answer("<b>Feedback skipped.</b>")
+        await callback.answer()
+        return
+
+    await state.update_data(order_id=order_id, rating=rating)
+    await state.set_state(FeedbackState.waiting_for_message)
+    await callback.message.answer(
+        "<b>Send one line feedback</b>\n\n"
+        f"<blockquote>Rating saved: <b>{rating}/5</b>. Tell Cutie what was good or what to improve.</blockquote>"
+    )
+    await callback.answer()
+
+
+@dp.message(FeedbackState.waiting_for_message)
+async def feedback_message(message: Message, state: FSMContext):
+    data = await state.get_data()
+    feedback_id = add_feedback(
+        message.from_user.id,
+        data.get("order_id"),
+        int(data.get("rating") or 0),
+        (message.text or "").strip(),
+    )
+
+    if feedback_id:
+        await message.answer(
+            "<b>Feedback saved.</b>\n\n"
+            "<blockquote>Cutie AI can use this memory to improve future help.</blockquote>"
+        )
+    else:
+        await message.answer("<b>Feedback could not be saved. Please try later.</b>")
+
+    await state.clear()
 
 
 @dp.callback_query(F.data.startswith("stock_alert_"))

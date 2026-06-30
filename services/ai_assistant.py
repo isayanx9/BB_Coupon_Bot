@@ -4,6 +4,7 @@ from html import escape
 import requests
 
 from config import OPENAI_API_KEY, OPENAI_MODEL
+from database.crud import get_feedback_memory_summary
 from texts import AI_NAME, COUPON_NAME
 
 
@@ -181,6 +182,7 @@ def local_ai_answer(question):
 
 def get_ai_answer(question):
     cleaned_question = (question or "").strip()
+    feedback_memory = get_feedback_memory_summary()
 
     if not cleaned_question:
         return local_ai_answer("")
@@ -191,7 +193,7 @@ def get_ai_answer(question):
     payload = {
         "model": OPENAI_MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": f"{SYSTEM_PROMPT}\n\nRecent purchase feedback memory:\n{feedback_memory}"},
             {"role": "user", "content": cleaned_question},
         ],
         "temperature": 0.35,

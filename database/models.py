@@ -134,6 +134,28 @@ class FlashSale(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    order_id = Column(String(50), nullable=True)
+    rating = Column(Integer, default=0)
+    message = Column(String(1000), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BulkBuyerPrice(Base):
+    __tablename__ = "bulk_buyer_prices"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger)
+    coupon_name = Column(String(255))
+    price = Column(Integer)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # =========================
 # COUPONS
 # =========================

@@ -55,10 +55,24 @@ class WalletTopUpState(StatesGroup):
     waiting_for_amount = State()
 
 
+class PurchaseQuantityState(StatesGroup):
+    waiting_for_quantity = State()
+
+
+class FeedbackState(StatesGroup):
+    waiting_for_message = State()
+
+
 class FlashSaleState(StatesGroup):
     waiting_for_coupon_name = State()
     waiting_for_title = State()
     waiting_for_discount_text = State()
+
+
+class BulkBuyerPriceState(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_coupon_name = State()
+    waiting_for_price = State()
 
 
 class ResetState(StatesGroup):

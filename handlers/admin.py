@@ -22,10 +22,12 @@ from database.crud import (
     get_all_user_ids,
     get_analytics_snapshot,
     get_recent_audit_logs,
+    get_recent_feedback,
     get_open_tickets,
     get_ticket_by_id,
     get_order_by_id,
     get_banned_users,
+    get_bulk_buyer_prices,
     get_cancelled_orders,
     get_completed_orders,
     get_coupon_summary,
@@ -42,6 +44,7 @@ from database.crud import (
     unban_user,
     update_coupon_price,
     reset_platform_data,
+    set_bulk_buyer_price,
 )
 from services.coupon_service import deliver_coupon
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
@@ -50,6 +53,7 @@ from keyboards.user import admin_main_menu, user_main_menu
 from states.order_states import (
     BanState,
     BroadcastState,
+    BulkBuyerPriceState,
     CouponUpload,
     DeleteCouponState,
     FlashSaleState,
@@ -66,6 +70,7 @@ from texts import (
     BTN_BACKUP,
     BTN_BAN_USER,
     BTN_BROADCAST,
+    BTN_BULK_BUYER,
     BTN_CONTROL_CENTER,
     BTN_DELETE_COUPON,
     BTN_EXIT_DEVELOPER,
@@ -668,6 +673,82 @@ async def set_price_value(message: Message, state: FSMContext):
     await state.clear()
 
 
+@router.message(F.text == BTN_BULK_BUYER)
+async def bulk_buyer_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    prices = get_bulk_buyer_prices(limit=10)
+    lines = [
+        f"User <code>{row.user_id}</code> • <code>{escape(row.coupon_name)}</code> • Rs <b>{row.price}</b>"
+        for row in prices
+    ]
+    await message.answer(
+        "⭐ <b>Bulk Buyer Special Price</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No special buyers yet.'}</blockquote>\n\n"
+        "Send Telegram user ID to add/update a special price."
+    )
+    await state.set_state(BulkBuyerPriceState.waiting_for_user_id)
+
+
+@router.message(BulkBuyerPriceState.waiting_for_user_id)
+async def bulk_buyer_user_id(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    try:
+        user_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("Send a numeric Telegram user ID.")
+        return
+
+    await state.update_data(user_id=user_id)
+    await message.answer("Send exact coupon name for this special price.")
+    await state.set_state(BulkBuyerPriceState.waiting_for_coupon_name)
+
+
+@router.message(BulkBuyerPriceState.waiting_for_coupon_name)
+async def bulk_buyer_coupon_name(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    await state.update_data(coupon_name=message.text.strip())
+    await message.answer("Send special price per coupon in Rs.")
+    await state.set_state(BulkBuyerPriceState.waiting_for_price)
+
+
+@router.message(BulkBuyerPriceState.waiting_for_price)
+async def bulk_buyer_price(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+
+    try:
+        price = int(message.text.strip())
+    except ValueError:
+        await message.answer("Send a number only, example: <code>10</code>")
+        return
+
+    if price < 0:
+        await message.answer("Price cannot be negative.")
+        return
+
+    data = await state.get_data()
+    ok = set_bulk_buyer_price(data["user_id"], data["coupon_name"], price)
+
+    if ok:
+        await message.answer(
+            "✅ <b>Bulk buyer price saved.</b>\n\n"
+            f"<blockquote>User: <code>{data['user_id']}</code>\n"
+            f"Coupon: <code>{escape(data['coupon_name'])}</code>\n"
+            f"Special Price: <b>Rs {price}</b></blockquote>"
+        )
+        audit_admin_action(message.from_user.id, "bulk_buyer_price", str(data))
+    else:
+        await message.answer("⚠️ <b>Could not save special price.</b>")
+
+    await state.clear()
+
+
 @router.message(F.text == BTN_DELETE_COUPON)
 async def delete_coupon_start(message: Message, state: FSMContext):
     if not await admin_only(message):
@@ -946,6 +1027,23 @@ async def audit_logs(message: Message):
     await message.answer(
         "🧾 <b>Audit Logs</b>\n\n"
         f"<blockquote>{chr(10).join(lines) if lines else 'No audit logs yet.'}</blockquote>"
+    )
+
+
+@router.message(F.text == "/feedbacks")
+async def feedbacks_report(message: Message):
+    if not is_admin(message):
+        return
+
+    feedbacks = get_recent_feedback(limit=20)
+    lines = [
+        f"User <code>{item.user_id}</code> • Order <code>{item.order_id or 'N/A'}</code> • {item.rating}/5\n"
+        f"{escape(item.message or 'No written feedback')}"
+        for item in feedbacks
+    ]
+    await message.answer(
+        "💬 <b>Purchase Feedback</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No feedback saved yet.'}</blockquote>"
     )
 
 

@@ -3,7 +3,9 @@ from database.models import (
     AdminAuditLog,
     BannedUser,
     BotSetting,
+    BulkBuyerPrice,
     Coupon,
+    Feedback,
     FlashSale,
     Order,
     Referral,
@@ -275,6 +277,131 @@ def get_wallet_transactions(user_id, limit=10):
             db.query(WalletTransaction)
             .filter(WalletTransaction.user_id == user_id)
             .order_by(WalletTransaction.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def add_feedback(user_id, order_id, rating, message):
+    db = SessionLocal()
+
+    try:
+        feedback = Feedback(
+            user_id=user_id,
+            order_id=order_id,
+            rating=rating,
+            message=(message or "")[:1000],
+        )
+        db.add(feedback)
+        db.commit()
+        return feedback.id
+
+    except Exception:
+        db.rollback()
+        return None
+
+    finally:
+        db.close()
+
+
+def get_recent_feedback(limit=20):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(Feedback)
+            .order_by(Feedback.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    finally:
+        db.close()
+
+
+def get_feedback_memory_summary(limit=8):
+    feedbacks = get_recent_feedback(limit)
+
+    if not feedbacks:
+        return "No user feedback memory yet."
+
+    lines = []
+    for item in feedbacks:
+        message = (item.message or "").strip() or "No written comment"
+        lines.append(
+            f"Order {item.order_id or 'N/A'} user {item.user_id} rating {item.rating}/5: {message[:160]}"
+        )
+
+    return "\n".join(lines)
+
+
+def set_bulk_buyer_price(user_id, coupon_name, price):
+    db = SessionLocal()
+
+    try:
+        row = (
+            db.query(BulkBuyerPrice)
+            .filter(
+                BulkBuyerPrice.user_id == user_id,
+                BulkBuyerPrice.coupon_name == coupon_name,
+            )
+            .first()
+        )
+
+        if row:
+            row.price = price
+            row.active = True
+        else:
+            row = BulkBuyerPrice(
+                user_id=user_id,
+                coupon_name=coupon_name,
+                price=price,
+            )
+            db.add(row)
+
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
+
+def get_bulk_buyer_price(user_id, coupon_name):
+    db = SessionLocal()
+
+    try:
+        row = (
+            db.query(BulkBuyerPrice)
+            .filter(
+                BulkBuyerPrice.user_id == user_id,
+                BulkBuyerPrice.coupon_name == coupon_name,
+                BulkBuyerPrice.active == True,
+            )
+            .order_by(BulkBuyerPrice.id.desc())
+            .first()
+        )
+
+        return row.price if row else None
+
+    finally:
+        db.close()
+
+
+def get_bulk_buyer_prices(limit=20):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(BulkBuyerPrice)
+            .filter(BulkBuyerPrice.active == True)
+            .order_by(BulkBuyerPrice.id.desc())
             .limit(limit)
             .all()
         )
@@ -1183,6 +1310,48 @@ def get_unsold_coupon(coupon_name):
         db.close()
 
 
+def claim_unsold_coupons(coupon_name, quantity):
+    db = SessionLocal()
+
+    try:
+        coupons = (
+            db.query(Coupon)
+            .filter(
+                Coupon.coupon_name == coupon_name,
+                Coupon.sold == False
+            )
+            .order_by(Coupon.id.asc())
+            .limit(quantity)
+            .all()
+        )
+
+        if len(coupons) < quantity:
+            return [], len(coupons)
+
+        codes = []
+        for coupon in coupons:
+            coupon.sold = True
+            codes.append(coupon.coupon_code)
+
+        db.commit()
+        remaining = (
+            db.query(Coupon)
+            .filter(
+                Coupon.coupon_name == coupon_name,
+                Coupon.sold == False
+            )
+            .count()
+        )
+        return codes, remaining
+
+    except Exception:
+        db.rollback()
+        return [], 0
+
+    finally:
+        db.close()
+
+
 def mark_coupon_sold(coupon_id):
     db = SessionLocal()
 
@@ -1363,6 +1532,32 @@ def update_delivery_status(
 
     finally:
         db.close()        
+
+
+def save_order_coupon_code(order_id, coupon_code):
+    db = SessionLocal()
+
+    try:
+        order = (
+            db.query(Order)
+            .filter(Order.order_id == order_id)
+            .first()
+        )
+
+        if not order:
+            return False
+
+        order.coupon_code = coupon_code
+        db.commit()
+        return True
+
+    except Exception:
+        db.rollback()
+        return False
+
+    finally:
+        db.close()
+
 
 def save_payment_session(
     order_id,
