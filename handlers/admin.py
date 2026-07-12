@@ -477,17 +477,36 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     await broadcast_launch_effect(message)
     sent = 0
     failed = 0
+    photo_id = message.photo[-1].file_id if message.photo else None
+    broadcast_text = message.caption if photo_id else message.text
+
+    if not photo_id and not broadcast_text:
+        await message.answer("Send text, a photo, or a photo with caption for broadcast.")
+        await state.clear()
+        return
 
     for user_id in get_all_user_ids():
         if is_user_banned(user_id):
             continue
 
         try:
+            if photo_id:
+                caption = "📣 <b>Broadcast from BB Coupon Bot</b>"
+                if broadcast_text:
+                    caption += f"\n\n<blockquote>{escape(broadcast_text)}</blockquote>"
+                await bot.send_photo(
+                    chat_id=user_id,
+                    photo=photo_id,
+                    caption=caption,
+                )
+                sent += 1
+                continue
+
             await bot.send_message(
                 chat_id=user_id,
                 text=(
                     "📣 <b>Broadcast from BB Coupon Bot</b>\n\n"
-                    f"<blockquote>{escape(message.text)}</blockquote>"
+                    f"<blockquote>{escape(broadcast_text or '')}</blockquote>"
                 ),
             )
             sent += 1
@@ -498,7 +517,11 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
         "✨ <b>Broadcast complete</b>\n\n"
         f"<blockquote>Sent: <b>{sent}</b>\nFailed: <b>{failed}</b></blockquote>"
     )
-    audit_admin_action(message.from_user.id, "broadcast", f"sent={sent}, failed={failed}")
+    audit_admin_action(
+        message.from_user.id,
+        "broadcast",
+        f"type={'photo' if photo_id else 'text'}, sent={sent}, failed={failed}",
+    )
     await state.clear()
 
 
