@@ -38,6 +38,7 @@ from database.crud import (
     get_total_revenue,
     get_total_users,
     get_coupon_stock,
+    coupon_code_exists,
     get_wallet_balance,
     is_user_banned,
     set_bot_setting,
@@ -312,6 +313,8 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
                 raise ValueError("coupon name and code are required")
             if code in submitted_codes:
                 raise ValueError("duplicate coupon code in this upload")
+            if coupon_code_exists(code):
+                raise ValueError("coupon code already exists; every coupon needs a unique code")
 
             discount = int(discount.strip())
             minimum = int(minimum.strip())
@@ -352,6 +355,11 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
         f"<blockquote>✅ Added: <b>{added}</b>\n"
         f"⚠️ Failed: <b>{failed}</b></blockquote>"
     )
+    if errors:
+        await message.answer(
+            "<b>Rows that were not added</b>\n"
+            f"<blockquote>{chr(10).join(errors[:3])}</blockquote>"
+        )
     audit_admin_action(message.from_user.id, "bulk_coupon_upload", f"added={added}, failed={failed}")
 
     if added:

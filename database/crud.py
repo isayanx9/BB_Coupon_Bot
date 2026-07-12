@@ -951,6 +951,20 @@ def add_coupon(
         db.close()
 
 
+def coupon_code_exists(coupon_code):
+    db = SessionLocal()
+
+    try:
+        return (
+            db.query(Coupon.id)
+            .filter(Coupon.coupon_code == coupon_code)
+            .first()
+            is not None
+        )
+    finally:
+        db.close()
+
+
 def get_total_coupons():
     db = SessionLocal()
 
