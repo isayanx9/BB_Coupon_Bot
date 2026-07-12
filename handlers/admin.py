@@ -289,7 +289,7 @@ async def add_coupon_button(message: Message, state: FSMContext):
     await state.set_state(CouponUpload.waiting_for_bulk_coupons)
 
 
-@router.message(CouponUpload.waiting_for_bulk_coupons)
+@router.message(CouponUpload.waiting_for_bulk_coupons, F.text)
 async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
         return
@@ -297,28 +297,55 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
     added = 0
     failed = 0
     added_coupon_names = set()
+    errors = []
+    submitted_codes = set()
 
-    for line in message.text.splitlines():
+    for line_number, line in enumerate(message.text.splitlines(), start=1):
         if not line.strip():
             continue
 
         try:
             name, code, discount, minimum, price = line.split("|")
+            name = name.strip()
+            code = code.strip()
+            if not name or not code:
+                raise ValueError("coupon name and code are required")
+            if code in submitted_codes:
+                raise ValueError("duplicate coupon code in this upload")
+
+            discount = int(discount.strip())
+            minimum = int(minimum.strip())
+            price = int(price.strip())
+            if discount < 0 or minimum < 0 or price < 0:
+                raise ValueError("discount, minimum order, and price must be zero or greater")
             success = add_coupon(
-                name.strip(),
-                code.strip(),
-                int(discount),
-                int(minimum),
-                int(price),
+                name,
+                code,
+                discount,
+                minimum,
+                price,
             )
 
             if success:
                 added += 1
-                added_coupon_names.add(name.strip())
+                added_coupon_names.add(name)
+                submitted_codes.add(code)
             else:
                 failed += 1
-        except Exception:
+                errors.append(f"Line {line_number}: coupon code already exists or could not be saved")
+        except (TypeError, ValueError) as error:
             failed += 1
+            errors.append(f"Line {line_number}: {escape(str(error))}")
+
+    if added == 0:
+        details = "\n".join(errors[:3]) or "No coupon rows were found."
+        await message.answer(
+            "<b>No coupons were added.</b>\n\n"
+            f"<blockquote>{details}</blockquote>\n\n"
+            "Try again using:\n"
+            "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>"
+        )
+        return
 
     await message.answer(
         "✨ <b>Upload Complete</b>\n\n"
@@ -342,6 +369,17 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"🔔 Restock alerts sent: <b>{sent}</b>")
 
     await state.clear()
+
+
+@router.message(CouponUpload.waiting_for_bulk_coupons)
+async def process_bulk_coupon_non_text(message: Message):
+    if not is_admin(message):
+        return
+
+    await message.answer(
+        "Send coupon rows as a text message:\n"
+        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>"
+    )
 
 
 @router.message(F.text == BTN_INVENTORY)
