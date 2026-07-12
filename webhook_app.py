@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from sqlalchemy import text
 
 from config import (
@@ -14,6 +14,7 @@ from config import (
     CASHFREE_CLIENT_SECRET,
     CASHFREE_ENV,
     PUBLIC_BASE_URL,
+    require_env,
 )
 from database.crud import (
     add_wallet_credit,
@@ -31,10 +32,19 @@ from database.crud import (
     update_order_status,
 )
 import database.db as database_db
+from database.db import initialize_database
+from database.models import Base
+from bot import dp
+from handlers.admin import router as admin_router
 from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 
 app = FastAPI()
+telegram_bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
+telegram_router_included = False
 
 
 def get_order_quantity(order_id):
@@ -62,6 +72,36 @@ def feedback_keyboard(order_id):
 
 def web_admin_allowed(token):
     return bool(ADMIN_WEB_TOKEN and token == ADMIN_WEB_TOKEN)
+
+
+@app.on_event("startup")
+async def startup():
+    global telegram_router_included
+
+    require_env()
+    initialize_database(Base)
+
+    if not telegram_router_included:
+        dp.include_router(admin_router)
+        telegram_router_included = True
+
+    await telegram_bot.set_webhook(
+        f"{PUBLIC_BASE_URL}/webhook/telegram",
+        drop_pending_updates=False,
+    )
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await telegram_bot.session.close()
+
+
+@app.post("/webhook/telegram")
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    update = Update.model_validate(data, context={"bot": telegram_bot})
+    await dp.feed_update(telegram_bot, update)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/")
