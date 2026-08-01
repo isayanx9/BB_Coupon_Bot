@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime, timedelta, timezone
 
 from config import (
     CASHFREE_CLIENT_ID,
@@ -34,6 +35,9 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         "order_id": order_id,
         "order_amount": float(amount),
         "order_currency": "INR",
+        "order_expiry_time": (
+            datetime.now(timezone.utc) + timedelta(minutes=5)
+        ).isoformat(),
         "customer_details": {
             "customer_id": str(customer_id),
             "customer_name": f"Telegram {customer_id}",

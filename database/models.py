@@ -226,6 +226,16 @@ class Order(Base):
         default=0
     )
 
+    quantity = Column(
+        Integer,
+        default=1
+    )
+
+    payment_expires_at = Column(
+        DateTime,
+        nullable=True
+    )
+
     # NEW FIELD
     payment_session_id = Column(
         String(500),

@@ -23,6 +23,7 @@ from database.crud import (
     create_referral,
     create_support_ticket,
     delete_bot_setting,
+    expire_order_if_needed,
     get_bot_setting,
     get_bulk_buyer_price,
     get_coupon_by_id,
@@ -681,7 +682,13 @@ async def purchase_quantity(message: Message, state: FSMContext, bot: Bot):
 
     unit_price = int(data.get("unit_price") or coupon.selling_price)
     total_amount = unit_price * quantity
-    order_id = create_order(message.from_user.id, coupon.coupon_name, total_amount, use_wallet=True)
+    order_id = create_order(
+        message.from_user.id,
+        coupon.coupon_name,
+        total_amount,
+        use_wallet=True,
+        quantity=quantity,
+    )
 
     if not order_id:
         await message.answer(
@@ -734,6 +741,20 @@ async def pay_order(callback: CallbackQuery):
 
     if not order:
         await callback.message.answer("💔 <b>Order not found.</b>")
+        await callback.answer()
+        return
+
+    if order.user_id != callback.from_user.id:
+        await callback.answer("This payment link belongs to another user.", show_alert=True)
+        return
+
+    if expire_order_if_needed(order_id) or order.payment_status != "PENDING":
+        refunded = refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        await callback.message.answer(
+            "<b>Payment window expired.</b>\n\n"
+            "<blockquote>This order was marked failed after 5 minutes. Create a new order to pay.</blockquote>"
+            + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
+        )
         await callback.answer()
         return
 
@@ -887,6 +908,20 @@ async def recheck_payment(callback: CallbackQuery, bot: Bot):
         await callback.answer()
         return
     
+    if order.user_id != callback.from_user.id:
+        await callback.answer("This order belongs to another user.", show_alert=True)
+        return
+
+    if expire_order_if_needed(order_id):
+        refunded = refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        await callback.message.answer(
+            "<b>Payment window expired.</b>\n\n"
+            "<blockquote>The order is now marked failed. Please create a fresh order.</blockquote>"
+            + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
+        )
+        await callback.answer()
+        return
+
     data = get_cashfree_order_status(order_id)
     
     if "error" in data:
@@ -1038,6 +1073,13 @@ async def my_orders(message: Message):
             f"💰 Amount: <b>Rs {order.amount}</b>\n"
             f"💳 Payment: <i>{order.payment_status}</i>\n"
             f"🚚 Delivery: <i>{order.delivery_status}</i></blockquote>\n"
+        )
+
+    for order in orders[:10]:
+        text += (
+            f"<blockquote>Quantity: <b>{order.quantity or 1}</b> | "
+            f"Wallet used: <b>Rs {order.wallet_used or 0}</b>\n"
+            f"Coupon codes: <code>{escape(order.coupon_code or 'Not delivered')}</code></blockquote>\n"
         )
 
     await message.answer(text)

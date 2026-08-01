@@ -77,3 +77,7 @@ class BulkBuyerPriceState(StatesGroup):
 
 class ResetState(StatesGroup):
     waiting_for_confirmation = State()
+
+
+class ExtractCodeState(StatesGroup):
+    waiting_for_order_id = State()

@@ -15,8 +15,10 @@ from database.models import (
     WalletTransaction,
 )
 from sqlalchemy import text, MetaData
+from sqlalchemy.exc import IntegrityError
 
 import uuid
+from datetime import datetime, timedelta
 
 
 def track_user(telegram_id, username=None):
@@ -65,7 +67,7 @@ def get_all_user_ids():
     try:
         return [
             row.telegram_id
-            for row in db.query(User.telegram_id).all()
+            for row in db.query(User.telegram_id).distinct().all()
         ]
 
     finally:
@@ -281,6 +283,27 @@ def get_wallet_transactions(user_id, limit=10):
             .all()
         )
 
+    finally:
+        db.close()
+
+
+def claim_broadcast_message(chat_id, message_id):
+    """Return True only for the first attempt to process a broadcast message.
+
+    Telegram can retry a webhook update if a large broadcast takes time to
+    complete.  The unique setting key makes each admin message idempotent,
+    including when more than one application instance is running.
+    """
+    db = SessionLocal()
+    claim_key = f"broadcast_claim:{chat_id}:{message_id}"
+
+    try:
+        db.add(BotSetting(key=claim_key, value="processing"))
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
     finally:
         db.close()
 
@@ -1122,7 +1145,8 @@ def create_order(
     user_id,
     coupon_name,
     amount,
-    use_wallet=True
+    use_wallet=True,
+    quantity=1,
 ):
     db = SessionLocal()
 
@@ -1154,6 +1178,8 @@ def create_order(
             amount=amount,
             wallet_used=wallet_used,
             payable_amount=payable_amount,
+            quantity=max(1, int(quantity or 1)),
+            payment_expires_at=datetime.utcnow() + timedelta(minutes=5),
             payment_status="PENDING",
             delivery_status="NOT_DELIVERED"
         )
@@ -1320,6 +1346,58 @@ def get_unsold_coupon(coupon_name):
 
         return coupon
 
+    finally:
+        db.close()
+
+
+def expire_order_if_needed(order_id):
+    """Atomically fail an unpaid order once its five-minute window closes."""
+    db = SessionLocal()
+    try:
+        updated = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id,
+                Order.payment_status == "PENDING",
+                Order.payment_expires_at.isnot(None),
+                Order.payment_expires_at <= datetime.utcnow(),
+            )
+            .update({Order.payment_status: "FAILED"}, synchronize_session=False)
+        )
+        db.commit()
+        return bool(updated)
+    except Exception:
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
+def expire_due_orders():
+    """Expire every pending payment window and return the affected order IDs."""
+    db = SessionLocal()
+    try:
+        due_order_ids = [
+            order_id
+            for (order_id,) in (
+                db.query(Order.order_id)
+                .filter(
+                    Order.payment_status == "PENDING",
+                    Order.payment_expires_at.isnot(None),
+                    Order.payment_expires_at <= datetime.utcnow(),
+                )
+                .all()
+            )
+        ]
+        if due_order_ids:
+            db.query(Order).filter(Order.order_id.in_(due_order_ids)).update(
+                {Order.payment_status: "FAILED"}, synchronize_session=False
+            )
+            db.commit()
+        return due_order_ids
+    except Exception:
+        db.rollback()
+        return []
     finally:
         db.close()
 
@@ -1546,6 +1624,21 @@ def update_delivery_status(
 
     finally:
         db.close()        
+
+
+def get_recent_orders(limit=25):
+    """Return recent orders with the Telegram username when it is known."""
+    db = SessionLocal()
+    try:
+        return (
+            db.query(Order, User.username)
+            .outerjoin(User, User.telegram_id == Order.user_id)
+            .order_by(Order.id.desc())
+            .limit(limit)
+            .all()
+        )
+    finally:
+        db.close()
 
 
 def save_order_coupon_code(order_id, coupon_code):

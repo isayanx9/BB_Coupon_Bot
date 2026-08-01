@@ -1,7 +1,7 @@
 import os
 import time
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
@@ -61,6 +61,7 @@ def initialize_database(base, retries=3, delay=2):
     for attempt in range(1, retries + 1):
         try:
             base.metadata.create_all(bind=engine)
+            _migrate_order_fields()
             print(f"Database ready: {active_database_url}")
             return active_database_url
         except SQLAlchemyError as error:
@@ -75,9 +76,27 @@ def initialize_database(base, retries=3, delay=2):
         print("Postgres unavailable. Falling back to local SQLite database.")
         switch_database(LOCAL_DATABASE_URL)
         base.metadata.create_all(bind=engine)
+        _migrate_order_fields()
         return active_database_url
 
     raise RuntimeError(
         "Database is not available. Add a new Railway Postgres database and "
         "set DATABASE_URL, or enable ALLOW_SQLITE_FALLBACK=true."
     ) from last_error
+
+
+def _migrate_order_fields():
+    """Add fields introduced after the first deployed orders table."""
+    columns = {column["name"] for column in inspect(engine).get_columns("orders")}
+    statements = []
+    if "quantity" not in columns:
+        statements.append("ALTER TABLE orders ADD COLUMN quantity INTEGER DEFAULT 1")
+    if "payment_expires_at" not in columns:
+        statements.append("ALTER TABLE orders ADD COLUMN payment_expires_at TIMESTAMP NULL")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))

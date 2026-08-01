@@ -13,6 +13,7 @@ from database.crud import (
     add_ticket_reply,
     add_wallet_credit,
     audit_admin_action,
+    claim_broadcast_message,
     ban_user,
     close_ticket,
     create_flash_sale,
@@ -23,6 +24,7 @@ from database.crud import (
     get_analytics_snapshot,
     get_recent_audit_logs,
     get_recent_feedback,
+    get_recent_orders,
     get_open_tickets,
     get_ticket_by_id,
     get_order_by_id,
@@ -57,6 +59,7 @@ from states.order_states import (
     BulkBuyerPriceState,
     CouponUpload,
     DeleteCouponState,
+    ExtractCodeState,
     FlashSaleState,
     PriceState,
     SettingState,
@@ -74,6 +77,9 @@ from texts import (
     BTN_BULK_BUYER,
     BTN_CONTROL_CENTER,
     BTN_DELETE_COUPON,
+    BTN_EXTRACT_CODE,
+    BTN_MAINTENANCE_OFF,
+    BTN_MAINTENANCE_ON,
     BTN_EXIT_DEVELOPER,
     BTN_FLASH_SALE,
     BTN_INVENTORY,
@@ -503,6 +509,92 @@ async def orders(message: Message):
     )
 
 
+    recent_orders = get_recent_orders(limit=20)
+    lines = []
+    for order, username in recent_orders:
+        handle = f"@{escape(username)}" if username else "No username"
+        lines.append(
+            f"<b>{handle}</b> | <code>{order.user_id}</code>\n"
+            f"<code>{order.order_id}</code> | {escape(order.coupon_name)} x <b>{order.quantity or 1}</b>\n"
+            f"Total: <b>Rs {order.amount}</b> | Wallet: <b>Rs {order.wallet_used or 0}</b>\n"
+            f"Payment: <i>{escape(order.payment_status)}</i> | Delivery: <i>{escape(order.delivery_status)}</i>"
+        )
+    await message.answer(
+        "<b>Recent Order History</b>\n\n"
+        f"<blockquote>{chr(10).join(lines) if lines else 'No orders yet.'}</blockquote>"
+    )
+
+
+@router.message(F.text == BTN_MAINTENANCE_ON)
+async def maintenance_on(message: Message):
+    if not await admin_only(message):
+        return
+
+    set_bot_setting("maintenance_mode", "on")
+    audit_admin_action(message.from_user.id, "maintenance_mode", "on")
+    await message.answer(
+        "<b>Maintenance mode is ON.</b>\n\n"
+        "<blockquote>Users will see the maintenance message until you turn it off.</blockquote>"
+    )
+
+
+@router.message(F.text == BTN_MAINTENANCE_OFF)
+async def maintenance_off(message: Message):
+    if not await admin_only(message):
+        return
+
+    set_bot_setting("maintenance_mode", "off")
+    audit_admin_action(message.from_user.id, "maintenance_mode", "off")
+    await message.answer(
+        "<b>Maintenance mode is OFF.</b>\n\n"
+        "<blockquote>The bot is available to users again.</blockquote>"
+    )
+
+
+@router.message(F.text == BTN_EXTRACT_CODE)
+async def extract_coupon_code_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    await state.set_state(ExtractCodeState.waiting_for_order_id)
+    await message.answer(
+        "<b>Extract Coupon Code</b>\n\n"
+        "<blockquote>Send the Order ID from the order history. Only delivered orders have codes to extract.</blockquote>"
+    )
+
+
+@router.message(ExtractCodeState.waiting_for_order_id)
+async def extract_coupon_code(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+
+    order_id = (message.text or "").strip().upper()
+    order = get_order_by_id(order_id)
+    if not order:
+        await message.answer("<b>Order not found.</b> Send a valid Order ID.")
+        return
+
+    if not order.coupon_code:
+        await message.answer(
+            "<b>No coupon code is available for this order.</b>\n\n"
+            f"<blockquote>Payment: <i>{escape(order.payment_status)}</i>\n"
+            f"Delivery: <i>{escape(order.delivery_status)}</i></blockquote>"
+        )
+        await state.clear()
+        return
+
+    await message.answer(
+        "<b>Extracted Coupon Code</b>\n\n"
+        f"<blockquote>Order: <code>{order.order_id}</code>\n"
+        f"Coupon: <code>{escape(order.coupon_name)}</code>\n"
+        f"Quantity: <b>{order.quantity or 1}</b>\n"
+        f"Customer ID: <code>{order.user_id}</code>\n\n"
+        f"Codes:\n<code>{escape(order.coupon_code)}</code></blockquote>"
+    )
+    audit_admin_action(message.from_user.id, "extract_coupon_code", order.order_id)
+    await state.clear()
+
+
 @router.message(F.text == BTN_BROADCAST)
 async def broadcast(message: Message, state: FSMContext):
     if not await admin_only(message):
@@ -518,6 +610,10 @@ async def broadcast(message: Message, state: FSMContext):
 @router.message(BroadcastState.waiting_for_message)
 async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
+        return
+
+    if not claim_broadcast_message(message.chat.id, message.message_id):
+        # This is a Telegram webhook retry of the same admin message.
         return
 
     await broadcast_launch_effect(message)
@@ -752,11 +848,13 @@ async def bulk_buyer_start(message: Message, state: FSMContext):
         f"User <code>{row.user_id}</code> • <code>{escape(row.coupon_name)}</code> • Rs <b>{row.price}</b>"
         for row in prices
     ]
-    await message.answer(
+    summary = (
         "⭐ <b>Bulk Buyer Special Price</b>\n\n"
         f"<blockquote>{chr(10).join(lines) if lines else 'No special buyers yet.'}</blockquote>\n\n"
         "Send Telegram user ID to add/update a special price."
     )
+
+    await message.answer(summary)
     await state.set_state(BulkBuyerPriceState.waiting_for_user_id)
 
 

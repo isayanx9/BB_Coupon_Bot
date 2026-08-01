@@ -1,3 +1,6 @@
+import asyncio
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 
@@ -23,7 +26,9 @@ from database.crud import (
     get_open_tickets,
     get_order_by_id,
     get_bot_setting,
+    expire_order_if_needed,
     get_payment_session,
+    expire_due_orders,
     get_recent_audit_logs,
     get_wallet_balance,
     refund_order_wallet_if_needed,
@@ -45,6 +50,15 @@ telegram_bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 telegram_router_included = False
+payment_expiry_task = None
+
+
+async def payment_expiry_worker():
+    """Keep pending orders from remaining payable after their 5-minute window."""
+    while True:
+        for order_id in expire_due_orders():
+            refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        await asyncio.sleep(30)
 
 
 def get_order_quantity(order_id):
@@ -76,7 +90,7 @@ def web_admin_allowed(token):
 
 @app.on_event("startup")
 async def startup():
-    global telegram_router_included
+    global telegram_router_included, payment_expiry_task
 
     require_env()
     initialize_database(Base)
@@ -89,10 +103,14 @@ async def startup():
         f"{PUBLIC_BASE_URL}/webhook/telegram",
         drop_pending_updates=False,
     )
+    if payment_expiry_task is None or payment_expiry_task.done():
+        payment_expiry_task = asyncio.create_task(payment_expiry_worker())
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    if payment_expiry_task:
+        payment_expiry_task.cancel()
     await telegram_bot.session.close()
 
 
@@ -204,6 +222,22 @@ async def admin_dashboard(token: str = ""):
 
 @app.get("/pay/{order_id}")
 async def pay_page(order_id: str):
+    if expire_order_if_needed(order_id):
+        refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+
+    order = get_order_by_id(order_id)
+    if not order or order.payment_status != "PENDING":
+        return HTMLResponse(
+            "<html><body><h1>Payment link expired</h1>"
+            "<p>This order is no longer payable. Return to Telegram and create a fresh order.</p>"
+            "</body></html>",
+            status_code=410,
+        )
+
+    expires_at = (order.payment_expires_at or datetime.utcnow()).replace(
+        tzinfo=timezone.utc
+    ).isoformat()
+
     session_id = get_payment_session(order_id)
 
     if not session_id:
@@ -293,6 +327,10 @@ async def pay_page(order_id: str):
                 color: #0369a1;
                 font-weight: 700;
             }}
+            button {{
+                width: 100%; border: 0; border-radius: 10px; padding: 15px;
+                background: #0f766e; color: white; font-size: 16px; font-weight: 700;
+            }}
             @keyframes flashIn {{
                 0% {{ transform: scale(0.97); box-shadow: 0 0 0 rgba(14, 165, 233, 0); }}
                 45% {{ transform: scale(1.01); box-shadow: 0 0 38px rgba(14, 165, 233, 0.32); }}
@@ -308,6 +346,8 @@ async def pay_page(order_id: str):
                 <em>Order ID:</em> <code>{order_id}</code>
             </blockquote>
             <p class="status">Flash redirect is starting. Please do not close this page.</p>
+            <p class="status">Payment window: <span id="paymentTimer">05:00</span></p>
+            <button type="button" id="retryCheckout">Open secure checkout</button>
         </main>
 
         <script>
@@ -315,10 +355,24 @@ async def pay_page(order_id: str):
                 mode: "{mode}"
             }});
 
-            cashfree.checkout({{
+            const checkoutOptions = {{
                 paymentSessionId: "{session_id}",
-                redirectTarget: "_self"
-            }});
+                redirectTarget: "_top"
+            }};
+            const openCheckout = () => cashfree.checkout(checkoutOptions);
+            document.getElementById("retryCheckout").addEventListener("click", openCheckout);
+            const expiresAt = new Date("{expires_at}").getTime();
+            const timer = document.getElementById("paymentTimer");
+            const updateTimer = () => {{
+                const remaining = Math.max(0, expiresAt - Date.now());
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                timer.textContent = `${{String(minutes).padStart(2, "0")}}:${{String(seconds).padStart(2, "0")}}`;
+                if (!remaining) window.location.reload();
+            }};
+            updateTimer();
+            window.setInterval(updateTimer, 1000);
+            window.setTimeout(openCheckout, 150);
         </script>
     </body>
     </html>
@@ -419,6 +473,9 @@ async def cashfree_webhook(request: Request):
             return JSONResponse({"success": True, "received": True})
 
         if payment_status in {"SUCCESS", "PAID", "ACTIVE"} and order_id:
+            if expire_order_if_needed(order_id):
+                refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+                return JSONResponse({"success": True, "expired": True})
             update_order_status(order_id, "SUCCESS")
             order = get_order_by_id(order_id)
 
