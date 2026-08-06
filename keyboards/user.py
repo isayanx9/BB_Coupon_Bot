@@ -42,13 +42,14 @@ def user_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
-            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
             [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
             [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
             [KeyboardButton(text=BTN_STOCK_ALERTS)],
         ],
         resize_keyboard=True,
-        input_field_placeholder="FLASH-X AI",
+        is_persistent=True,
+        input_field_placeholder="✨ What would you like to do?",
     )
 
 
@@ -56,14 +57,15 @@ def admin_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
-            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
             [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
             [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
             [KeyboardButton(text=BTN_STOCK_ALERTS)],
             [KeyboardButton(text=BTN_CONTROL_CENTER)],
         ],
         resize_keyboard=True,
-        input_field_placeholder="FLASH-X CONTROL CENTER",
+        is_persistent=True,
+        input_field_placeholder="🛠️ Admin control center",
     )
 
 

@@ -11,9 +11,8 @@ def coupon_list_keyboard(options):
             [
                 InlineKeyboardButton(
                     text=(
-                        f"🎟 {option['coupon_name']} "
-                        f"• Rs {option['price']} "
-                        f"• Stock {option['stock']}"
+                        f"🛒 {option['coupon_name']} · ₹{option['price']} "
+                        f"· {option['stock']} left"
                     ),
                     callback_data=f"buy_type_{option['coupon_id']}",
                 )
@@ -23,7 +22,7 @@ def coupon_list_keyboard(options):
     rows.append(
         [
             InlineKeyboardButton(
-                text="🔔 Alert Me On Restock",
+                text="🔔 Notify me when deals restock",
                 callback_data="stock_alert_ALL",
             )
         ]
@@ -35,7 +34,7 @@ def coupon_list_keyboard(options):
 def buy_coupon_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=BTN_BUY_NOW, callback_data="buy_bb_coupon")]
+            [InlineKeyboardButton(text="🛍️ Browse coupon deals", callback_data="buy_bb_coupon")]
         ]
     )
 
@@ -43,8 +42,8 @@ def buy_coupon_keyboard():
 def payment_keyboard(order_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=BTN_PAY_NOW, callback_data=f"pay_{order_id}")],
-            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}")],
-            [InlineKeyboardButton(text=BTN_CANCEL_ORDER, callback_data=f"cancel_{order_id}")],
+            [InlineKeyboardButton(text="💳 Pay securely", callback_data=f"pay_{order_id}")],
+            [InlineKeyboardButton(text="🔄 I've paid — check status", callback_data=f"recheck_{order_id}")],
+            [InlineKeyboardButton(text="❌ Cancel this order", callback_data=f"cancel_{order_id}")],
         ]
     )
