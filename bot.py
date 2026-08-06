@@ -50,7 +50,7 @@ from database.models import Base
 from database.payment import create_cashfree_payment_link, get_cashfree_order_status
 from handlers.admin import router as admin_router
 from keyboards.shop import coupon_list_keyboard, payment_keyboard
-from keyboards.user import admin_main_menu, join_keyboard, terms_keyboard, user_main_menu
+from keyboards.user import admin_main_menu, join_keyboard, launch_shop_keyboard, terms_keyboard, user_main_menu
 from services.ai_assistant import get_ai_answer
 from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
@@ -518,6 +518,11 @@ async def accept_terms(callback: CallbackQuery):
 
     menu = admin_main_menu() if str(callback.from_user.id) == str(ADMIN_ID) else user_main_menu()
     await callback.message.answer("🏠 <b>Main Menu</b>", reply_markup=menu)
+    await callback.message.answer(
+        "✨ <b>BB Coupon Shop is ready</b>\n\n"
+        "<blockquote>Browse live stock, pay securely, and view delivered codes in one place.</blockquote>",
+        reply_markup=launch_shop_keyboard(),
+    )
     await callback.answer()
 
 

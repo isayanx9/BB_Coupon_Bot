@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, Update, WebAppInfo
 from sqlalchemy import text
 
 from config import (
@@ -41,10 +41,12 @@ from database.db import initialize_database
 from database.models import Base
 from bot import dp
 from handlers.admin import router as admin_router
+from mini_app import router as mini_app_router
 from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 
 app = FastAPI()
+app.include_router(mini_app_router)
 telegram_bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -103,6 +105,12 @@ async def startup():
         f"{PUBLIC_BASE_URL}/webhook/telegram",
         drop_pending_updates=False,
     )
+    await telegram_bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(
+            text="Open Shop",
+            web_app=WebAppInfo(url=f"{PUBLIC_BASE_URL}/mini"),
+        )
+    )
     if payment_expiry_task is None or payment_expiry_task.done():
         payment_expiry_task = asyncio.create_task(payment_expiry_worker())
 
@@ -128,7 +136,6 @@ async def home():
         "status": "running",
         "service": "BB Coupon Bot",
         "ai_assist": "Cutie enabled",
-        "database": database_db.active_database_url,
         "public_base_url": PUBLIC_BASE_URL,
         "cashfree_env": CASHFREE_ENV,
     }
@@ -153,8 +160,7 @@ async def health():
     return {
         "ok": database_ok and cashfree_ok,
         "database_ok": database_ok,
-        "database_url": database_db.active_database_url,
-        "database_error": database_error,
+        "database_error": "unavailable" if database_error else None,
         "cashfree_ok": cashfree_ok,
         "cashfree_env": CASHFREE_ENV,
         "public_base_url": PUBLIC_BASE_URL,

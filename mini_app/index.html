@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>BB Coupon Shop</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+  <link rel="stylesheet" href="/mini/static/style.css">
+</head>
+<body>
+  <main id="app"><div class="orb one"></div><div class="orb two"></div>
+    <section id="loading" class="loading"><span class="logo">BB</span><b>Loading your deals…</b></section>
+    <section id="shop" hidden>
+      <header><div><p class="eyebrow">PREMIUM SAVINGS</p><h1>Hey, <span id="name">Friend</span> ✨</h1></div><button class="avatar" id="profile-btn">👤</button></header>
+      <section class="hero"><p>FLASH DEALS</p><h2>Save more on every basket.</h2><span>⚡ Instant coupon delivery after payment</span></section>
+      <section class="stats"><button data-view="wallet"><b id="wallet">₹0</b><span>Wallet</span></button><button data-view="orders"><b id="order-count">0</b><span>My orders</span></button><button data-view="refer"><b id="referrals">0</b><span>Referrals</span></button></section>
+      <div class="section-title"><h2>Live coupons</h2><span id="stock-label">Live stock</span></div>
+      <div id="coupons" class="coupon-grid"></div>
+      <section id="view" class="sheet" hidden></section>
+      <nav><button class="active" data-nav="home">⌂<span>Home</span></button><button data-nav="orders">▣<span>Orders</span></button><button data-nav="wallet">◈<span>Wallet</span></button><button data-nav="support">◌<span>Support</span></button></nav>
+    </section>
+  </main>
+  <div id="toast"></div><script src="/mini/static/app.js"></script>
+</body>
+</html>
