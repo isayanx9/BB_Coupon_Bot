@@ -8,7 +8,7 @@
   const open = (title, body) => window.openPage(title, body);
 
   function countdown(value) {
-    if (!value) return 'Limited time';
+    if (!value) return '';
     const seconds = Math.max(0, Math.floor((new Date(value).getTime() - Date.now()) / 1000));
     return seconds ? `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` : 'Ended';
   }
@@ -17,7 +17,7 @@
     if (!window.state?.data) return;
     const sales = window.state.data.flash_sales || [];
     const holder = q('#flash-sales');
-    if (holder) holder.innerHTML = sales.map(s => `<article class="flash-sale"><b>FLASH: ${safe(s.title || s.coupon_name)}</b><small>${safe(s.discount_text || 'Special live price')}</small><time data-sale-expiry="${safe(s.expires_at || '')}">${countdown(s.expires_at)}</time></article>`).join('');
+    if (holder) holder.innerHTML = sales.filter(s => s.expires_at).map(s => `<article class="flash-sale"><b>FLASH: ${safe(s.title || s.coupon_name)}</b><small>${safe(s.discount_text || 'Special live price')}</small><time data-sale-expiry="${safe(s.expires_at)}">${countdown(s.expires_at)}</time></article>`).join('');
     document.querySelectorAll('.coupon').forEach((card, index) => {
       if (card.querySelector('.coupon-watch')) return;
       const coupon = window.state.data.coupons[index];

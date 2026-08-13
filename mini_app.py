@@ -160,6 +160,9 @@ async def bootstrap(request: Request):
     user_id = int(user["id"])
     coupons = get_coupon_type_options()
     for coupon in coupons:
+        coupon["description"] = get_bot_setting(
+            f"coupon_description:{coupon['coupon_name']}", ""
+        )
         special_price = get_bulk_buyer_price(user_id, coupon["coupon_name"])
         if special_price is not None:
             coupon["price"] = special_price

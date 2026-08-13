@@ -2,6 +2,7 @@ import asyncio
 import csv
 from html import escape
 from pathlib import Path
+from datetime import datetime, timedelta
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -289,9 +290,9 @@ async def add_coupon_button(message: Message, state: FSMContext):
         "➕ <b>Inventory Import</b>\n\n"
         "<blockquote>Send one or many coupon rows. Cutie will parse them in bulk.</blockquote>\n\n"
         "📌 <b>Format</b>\n"
-        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>\n\n"
+        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price|Description</code>\n\n"
         "✨ <b>Example</b>\n"
-        f"<code>{COUPON_NAME}|BB100ICE001|100|100|14</code>"
+        f"<code>{COUPON_NAME}|BB100ICE001|100|100|14|Use on eligible orders</code>"
     )
     await state.set_state(CouponUpload.waiting_for_bulk_coupons)
 
@@ -312,9 +313,11 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
             continue
 
         try:
-            name, code, discount, minimum, price = line.split("|")
-            name = name.strip()
-            code = code.strip()
+            parts = [part.strip() for part in line.split("|")]
+            if len(parts) not in {5, 6}:
+                raise ValueError("use 5 fields, or add a sixth Description field")
+            name, code, discount, minimum, price = parts[:5]
+            description = parts[5] if len(parts) == 6 else ""
             if not name or not code:
                 raise ValueError("coupon name and code are required")
             if code in submitted_codes:
@@ -339,6 +342,8 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
                 added += 1
                 added_coupon_names.add(name)
                 submitted_codes.add(code)
+                if description:
+                    set_bot_setting(f"coupon_description:{name}", description)
             else:
                 failed += 1
                 errors.append(f"Line {line_number}: coupon code already exists or could not be saved")
@@ -352,7 +357,7 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
             "<b>No coupons were added.</b>\n\n"
             f"<blockquote>{details}</blockquote>\n\n"
             "Try again using:\n"
-            "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>"
+            "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price|Description</code>"
         )
         return
 
@@ -392,7 +397,7 @@ async def process_bulk_coupon_non_text(message: Message):
 
     await message.answer(
         "Send coupon rows as a text message:\n"
-        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price</code>"
+        "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price|Description</code>"
     )
 
 
@@ -1130,26 +1135,76 @@ async def flash_sale_title(message: Message, state: FSMContext):
         return
 
     await state.update_data(title=message.text.strip())
-    await message.answer("💥 <b>Send discount text, example: 2 hour drop.</b>")
-    await state.set_state(FlashSaleState.waiting_for_discount_text)
+    await message.answer("Send the sale price in rupees. This updates the price for this coupon name.")
+    await state.set_state(FlashSaleState.waiting_for_sale_price)
 
 
-@router.message(FlashSaleState.waiting_for_discount_text)
-async def flash_sale_discount(message: Message, state: FSMContext):
+@router.message(FlashSaleState.waiting_for_sale_price)
+async def flash_sale_price(message: Message, state: FSMContext):
     if not is_admin(message):
         return
 
+    try:
+        sale_price = int((message.text or "").strip())
+        if sale_price < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("Send a valid non-negative rupee amount.")
+        return
+    await state.update_data(sale_price=sale_price)
+    await message.answer("Send duration in minutes, for example 60. The sale disappears automatically at the end time.")
+    await state.set_state(FlashSaleState.waiting_for_duration_minutes)
+
+
+@router.message(FlashSaleState.waiting_for_duration_minutes)
+async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
+    if not is_admin(message):
+        return
+    try:
+        minutes = int((message.text or "").strip())
+        if not 1 <= minutes <= 10080:
+            raise ValueError
+    except ValueError:
+        await message.answer("Send duration from 1 to 10080 minutes.")
+        return
     data = await state.get_data()
+    if get_coupon_stock(data["coupon_name"]) < 1:
+        await message.answer("No available stock exists for that coupon name. Add stock first, then create the sale.")
+        await state.clear()
+        return
+    if not update_coupon_price(data["coupon_name"], data["sale_price"]):
+        await message.answer("Coupon name was not found. No sale was created.")
+        await state.clear()
+        return
+    expires_at = datetime.utcnow() + timedelta(minutes=minutes)
     sale_id = create_flash_sale(
         data["coupon_name"],
         data["title"],
-        message.text.strip(),
+        f"Rs {data['sale_price']} · ends in {minutes} minutes",
+        expires_at=expires_at,
     )
+    broadcast_text = (
+        f"⚡ <b>{escape(data['title'])}</b>\n\n"
+        f"<blockquote>Coupon: <code>{escape(data['coupon_name'])}</code>\n"
+        f"Sale price: <b>Rs {data['sale_price']}</b>\n"
+        f"Ends: <b>{expires_at.strftime('%d %b %Y, %I:%M %p UTC')}</b></blockquote>\n\n"
+        "Open BB Coupon Shop to buy while stock lasts."
+    )
+    sent = 0
+    for user_id in get_all_user_ids():
+        if is_user_banned(user_id):
+            continue
+        try:
+            await bot.send_message(user_id, broadcast_text)
+            sent += 1
+        except Exception:
+            pass
     await message.answer(
-        "⚡ <b>Flash sale created.</b>\n\n"
-        f"<blockquote>Sale ID: <code>{sale_id}</code></blockquote>"
+        "Flash sale created.\n\n"
+        f"<blockquote>Sale ID: <code>{sale_id}</code>\nPrice: <b>Rs {data['sale_price']}</b>\n"
+        f"Ends: <b>{expires_at.strftime('%d %b %Y, %I:%M %p UTC')}</b>\nBroadcast sent: <b>{sent}</b></blockquote>"
     )
-    audit_admin_action(message.from_user.id, "flash_sale", str(data))
+    audit_admin_action(message.from_user.id, "flash_sale", f"{data}; minutes={minutes}; sent={sent}")
     await state.clear()
 
 

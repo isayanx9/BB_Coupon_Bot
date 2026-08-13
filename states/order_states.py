@@ -66,7 +66,8 @@ class FeedbackState(StatesGroup):
 class FlashSaleState(StatesGroup):
     waiting_for_coupon_name = State()
     waiting_for_title = State()
-    waiting_for_discount_text = State()
+    waiting_for_sale_price = State()
+    waiting_for_duration_minutes = State()
 
 
 class BulkBuyerPriceState(StatesGroup):

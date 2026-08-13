@@ -837,9 +837,16 @@ def get_active_flash_sales(limit=5):
     db = SessionLocal()
 
     try:
+        now = datetime.utcnow()
+        (
+            db.query(FlashSale)
+            .filter(FlashSale.active == True, FlashSale.expires_at.isnot(None), FlashSale.expires_at <= now)
+            .update({FlashSale.active: False}, synchronize_session=False)
+        )
+        db.commit()
         return (
             db.query(FlashSale)
-            .filter(FlashSale.active == True)
+            .filter(FlashSale.active == True, FlashSale.expires_at.isnot(None), FlashSale.expires_at > now)
             .order_by(FlashSale.id.desc())
             .limit(limit)
             .all()
