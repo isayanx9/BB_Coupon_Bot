@@ -543,14 +543,6 @@ async def cashfree_webhook(request: Request):
                         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
                     )
 
-                    if should_send_stock_alert(remaining_stock):
-                        await notify_stock_alerts(
-                            bot,
-                            order.coupon_name,
-                            remaining_stock,
-                            reason="low_stock" if remaining_stock > 0 else "sold_out",
-                        )
-
                     await bot.send_message(
                         chat_id=order.user_id,
                         text=(
@@ -569,6 +561,13 @@ async def cashfree_webhook(request: Request):
                         ),
                         reply_markup=feedback_keyboard(order.order_id),
                     )
+                    if should_send_stock_alert(remaining_stock):
+                        await notify_stock_alerts(
+                            bot,
+                            order.coupon_name,
+                            remaining_stock,
+                            reason="low_stock" if remaining_stock > 0 else "sold_out",
+                        )
 
                     await bot.session.close()
                     print(f"Coupon delivered: {coupon_code}")

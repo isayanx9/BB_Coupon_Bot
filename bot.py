@@ -53,6 +53,7 @@ from database.db import initialize_database
 from database.models import Base
 from database.payment import create_cashfree_payment_link, get_cashfree_order_status
 from handlers.admin import router as admin_router
+from keyboards.admin import developer_menu
 from keyboards.shop import coupon_list_keyboard, payment_keyboard
 from keyboards.user import admin_main_menu, join_keyboard, launch_shop_keyboard, terms_keyboard, user_main_menu
 from services.ai_assistant import get_ai_answer
@@ -63,6 +64,7 @@ from texts import (
     BOT_USERNAME,
     BTN_ACCESS_LOG,
     BTN_AI_ASSIST,
+    BTN_CONTROL_CENTER,
     BTN_DEAL_VAULT,
     BTN_PROFILE,
     BTN_RAISE_TICKET,
@@ -556,32 +558,11 @@ async def decline_terms(callback: CallbackQuery):
 async def buy_coupons(message: Message):
     if await reject_if_banned(message):
         return
-
-    await vault_sync_effect(message)
-    await coupon_reveal_effect(message)
-    options = get_coupon_type_options()
-
-    if not options:
-        await message.answer(
-            "😔 <b>No active coupons right now.</b>\n\n"
-            "<blockquote>Cutie will show deals here as soon as admin uploads stock.</blockquote>"
-        )
-        return
-
-    lines = []
-
-    for option in options[:12]:
-        lines.append(
-            f"🎟 <code>{escape(option['coupon_name'])}</code>\n"
-            f"💎 Rs {option['discount']} OFF • Min Rs {option['minimum']}\n"
-            f"📦 Stock <b>{option['stock']}</b> • 💰 Price <b>Rs {option['price']}</b>"
-        )
-
     await message.answer(
-        "⚡ <b>Premium Deal Vault</b>\n\n"
-        f"<blockquote>{chr(10).join(lines)}</blockquote>\n\n"
-        "<i>Cutie says: tap a deal and I will prepare it fast.</i>",
-        reply_markup=coupon_list_keyboard(options[:12]),
+        "🛍️ <b>Buy Coupons</b>\n\n"
+        "<blockquote>Open the secure shop to choose a coupon and quantity. "
+        "Cashfree opens inside Telegram after one checkout tap—no payment link or recheck button.</blockquote>",
+        reply_markup=launch_shop_keyboard(),
     )
 
 
@@ -590,6 +571,15 @@ async def buy_coupon_type(callback: CallbackQuery, state: FSMContext):
     if is_user_banned(callback.from_user.id):
         await callback.answer("Access blocked.", show_alert=True)
         return
+
+    await state.clear()
+    await callback.message.answer(
+        "<b>Secure checkout has moved to the BB Coupon Shop.</b>\n\n"
+        "<blockquote>It opens Cashfree inside Telegram and delivers automatically after confirmation.</blockquote>",
+        reply_markup=launch_shop_keyboard(),
+    )
+    await callback.answer()
+    return
 
     await flash_effect(callback, FLASH_ORDER_TEXT)
     coupon_id = int(callback.data.replace("buy_type_", ""))
@@ -673,6 +663,14 @@ async def purchase_quantity(message: Message, state: FSMContext, bot: Bot):
     if await reject_if_banned(message):
         return
 
+    await state.clear()
+    await message.answer(
+        "<b>Secure checkout has moved to the BB Coupon Shop.</b>\n\n"
+        "<blockquote>Choose the coupon and quantity there to pay inside Telegram.</blockquote>",
+        reply_markup=launch_shop_keyboard(),
+    )
+    return
+
     try:
         quantity = int((message.text or "").strip())
     except ValueError:
@@ -752,6 +750,19 @@ async def purchase_quantity(message: Message, state: FSMContext, bot: Bot):
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def pay_order(callback: CallbackQuery):
+    order = get_order_by_id(callback.data.replace("pay_", ""))
+    if not order or order.user_id != callback.from_user.id:
+        await callback.answer("Order not found.", show_alert=True)
+        return
+    await callback.message.answer(
+        "<b>This older order uses the retired link checkout.</b>\n\n"
+        "<blockquote>Open the BB Coupon Shop to create a secure in-app checkout. "
+        "Do not pay through a previous link.</blockquote>",
+        reply_markup=launch_shop_keyboard(),
+    )
+    await callback.answer()
+    return
+
     order_id = callback.data.replace("pay_", "")
     await flash_effect(callback, FLASH_PAYMENT_TEXT)
     await energy_collecting_effect(callback)
@@ -872,20 +883,6 @@ async def finalize_paid_order(order_id, bot: Bot):
     update_delivery_status(order_id, "DELIVERED")
     reward_referral_if_needed(order.user_id, 1)
 
-    if should_send_stock_alert(remaining_stock):
-        await notify_stock_alerts(
-            bot,
-            order.coupon_name,
-            remaining_stock,
-            reason="low_stock" if remaining_stock > 0 else "sold_out",
-        )
-
-    delivery_intro = await bot.send_message(
-        chat_id=order.user_id,
-        text="📦 <b>Finalizing delivery</b>\n\n<blockquote>Cutie is unlocking your coupon now...</blockquote>",
-    )
-    await order_delivery_effect(delivery_intro)
-
     await bot.send_message(
         chat_id=order.user_id,
         text=(
@@ -903,6 +900,13 @@ async def finalize_paid_order(order_id, bot: Bot):
         ),
         reply_markup=feedback_keyboard(order.order_id),
     )
+    if should_send_stock_alert(remaining_stock):
+        await notify_stock_alerts(
+            bot,
+            order.coupon_name,
+            remaining_stock,
+            reason="low_stock" if remaining_stock > 0 else "sold_out",
+        )
     return True, ", ".join(coupon_codes)
 
 
@@ -1048,6 +1052,14 @@ async def feedback_rating(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(FeedbackState.waiting_for_message)
 async def feedback_message(message: Message, state: FSMContext):
+    if message.text == BTN_CONTROL_CENTER and str(message.from_user.id) == str(ADMIN_ID):
+        await state.clear()
+        await message.answer(
+            "Developer Panel\n\n<blockquote>Admin mode is active.</blockquote>",
+            reply_markup=developer_menu(),
+        )
+        return
+
     data = await state.get_data()
     feedback_id = add_feedback(
         message.from_user.id,
