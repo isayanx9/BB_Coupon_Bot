@@ -31,6 +31,7 @@ from database.crud import (
     get_open_tickets,
     get_order_by_id,
     get_bot_setting,
+    audit_admin_action,
     expire_order_if_needed,
     get_payment_session,
     expire_due_orders,
@@ -439,7 +440,7 @@ async def payment_result(order_id: str, status: str = ""):
                     Order: <code>{order_id}</code><br>
                     Status: <code>{safe_status}</code>
                 </blockquote>
-                <p>Return to Telegram and tap <b>I Paid, Recheck</b>. Cutie will deliver the coupon after Cashfree confirms payment.</p>
+                <p>Return to the BB Coupon Shop in Telegram. Payment confirmation and coupon delivery run automatically.</p>
             </main>
         </body>
         </html>
@@ -492,7 +493,10 @@ async def cashfree_webhook(request: Request):
         ).upper()
 
         if not order_id:
+            audit_admin_action(0, "cashfree_webhook", "received_without_order")
             return JSONResponse({"success": True, "received": True})
+
+        audit_admin_action(0, "cashfree_webhook", f"{order_id}:{payment_status or 'UNKNOWN'}")
 
         if payment_status in {"FAILED", "USER_DROPPED"}:
             update_order_status(order_id, "FAILED")

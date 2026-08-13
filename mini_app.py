@@ -23,6 +23,7 @@ from aiogram.enums import ParseMode
 from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV
 from database.crud import (
     add_wallet_credit,
+    audit_admin_action,
     create_order,
     create_support_ticket,
     claim_order_delivery,
@@ -36,12 +37,14 @@ from database.crud import (
     get_order_by_id,
     get_referral_count,
     get_open_tickets,
+    get_bot_setting,
     get_user_orders,
     get_wallet_balance,
     get_wallet_transactions,
     is_user_banned,
     save_payment_session,
     save_order_coupon_code,
+    set_bot_setting,
     release_order_delivery_claim,
     refund_order_wallet_if_needed,
     track_user,
@@ -183,6 +186,32 @@ async def admin_overview(request: Request):
             {"id": ticket.id, "subject": ticket.subject, "status": ticket.status}
             for ticket in get_open_tickets(limit=8)
         ],
+        "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),
+    }
+
+
+@router.post("/api/mini/admin/maintenance")
+async def admin_maintenance(request: Request):
+    """Only the configured Telegram admin can change customer availability."""
+    user = telegram_user(request)
+    if str(user["id"]) != str(ADMIN_ID):
+        raise HTTPException(403, "Admin access only.")
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    value = "on" if enabled else "off"
+    set_bot_setting("maintenance_mode", value)
+    audit_admin_action(int(user["id"]), "maintenance_mode", value)
+    return {"maintenance_mode": value}
+
+
+@router.get("/api/mini/service-status")
+async def service_status(request: Request):
+    telegram_user(request)
+    return {
+        "shop": "online",
+        "cashfree": "online",
+        "instant_delivery": "active",
+        "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),
     }
 
 
@@ -262,6 +291,19 @@ async def create_ticket(request: Request):
     ticket_id = create_support_ticket(int(user["id"]), subject, message)
     if not ticket_id:
         raise HTTPException(500, "Could not create the ticket.")
+    if ADMIN_ID:
+        bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        try:
+            await bot.send_message(
+                int(ADMIN_ID),
+                "🎫 <b>New support ticket</b>\n\n"
+                f"<blockquote>Ticket: <code>#{ticket_id}</code>\n"
+                f"User: <code>{user['id']}</code>\n"
+                f"Subject: <b>{subject}</b>\n\n{message}</blockquote>\n\n"
+                "Open Control Center → Reply Ticket to respond.",
+            )
+        finally:
+            await bot.session.close()
     return {"ok": True, "ticket_id": ticket_id}
 
 
