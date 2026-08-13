@@ -20,7 +20,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV
+from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV, CHANNEL_USERNAME, GROUP_USERNAME
 from database.crud import (
     add_wallet_credit,
     add_ticket_reply,
@@ -67,7 +67,7 @@ router = APIRouter()
 router.mount("/mini/static", StaticFiles(directory=ROOT), name="mini-static")
 
 
-def telegram_user(request: Request):
+async def telegram_user(request: Request):
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     if not init_data:
         raise HTTPException(401, "Open this shop from Telegram.")
@@ -93,6 +93,17 @@ def telegram_user(request: Request):
     # payment issues even if an old ban record exists.
     if str(user_id) != str(ADMIN_ID) and is_user_banned(user_id):
         raise HTTPException(403, "This account is restricted.")
+    bot = Bot(token=BOT_TOKEN)
+    try:
+        channel_member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        group_member = await bot.get_chat_member(GROUP_USERNAME, user_id)
+    except Exception as error:
+        raise HTTPException(403, "Join our required channel and support group, then tap Verify in the bot.") from error
+    finally:
+        await bot.session.close()
+    valid_statuses = {"member", "administrator", "creator", "owner"}
+    if channel_member.status not in valid_statuses or group_member.status not in valid_statuses:
+        raise HTTPException(403, "Join our required channel and support group, then tap Verify in the bot.")
     track_user(user_id, user.get("username"))
     return user
 
@@ -158,7 +169,7 @@ async def mini_app_home():
 
 @router.get("/api/mini/bootstrap")
 async def bootstrap(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     user_id = int(user["id"])
     coupons = get_coupon_type_options()
     for coupon in coupons:
@@ -199,7 +210,7 @@ async def bootstrap(request: Request):
 @router.get("/api/mini/admin/overview")
 async def admin_overview(request: Request):
     """Protected, read-only Mini App dashboard for the configured admin."""
-    user = telegram_user(request)
+    user = await telegram_user(request)
     if str(user["id"]) != str(ADMIN_ID):
         raise HTTPException(403, "Admin access only.")
     return {
@@ -220,7 +231,7 @@ async def admin_overview(request: Request):
 @router.post("/api/mini/admin/maintenance")
 async def admin_maintenance(request: Request):
     """Only the configured Telegram admin can change customer availability."""
-    user = telegram_user(request)
+    user = await telegram_user(request)
     if str(user["id"]) != str(ADMIN_ID):
         raise HTTPException(403, "Admin access only.")
     body = await request.json()
@@ -233,7 +244,7 @@ async def admin_maintenance(request: Request):
 
 @router.get("/api/mini/service-status")
 async def service_status(request: Request):
-    telegram_user(request)
+    await telegram_user(request)
     return {
         "shop": "online",
         "cashfree": "online",
@@ -244,13 +255,13 @@ async def service_status(request: Request):
 
 @router.get("/api/mini/tickets")
 async def user_tickets(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     return {"tickets": [{"id": t.id, "subject": t.subject, "status": t.status, "messages": t.messages, "created_at": t.created_at.isoformat()} for t in get_user_tickets(int(user["id"]))]}
 
 
 @router.post("/api/mini/stock-watch")
 async def stock_watch(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     body = await request.json()
     coupon_name = str(body.get("coupon_name", "ALL")).strip()[:255] or "ALL"
     if not subscribe_stock_alert(int(user["id"]), coupon_name):
@@ -260,7 +271,7 @@ async def stock_watch(request: Request):
 
 @router.post("/api/mini/coupon-validate")
 async def coupon_validate(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     code = str((await request.json()).get("code", "")).strip()
     if len(code) < 3:
         raise HTTPException(422, "Enter a valid coupon code.")
@@ -275,7 +286,7 @@ async def coupon_validate(request: Request):
 
 @router.get("/api/mini/receipts/{order_id}")
 async def receipt(order_id: str, request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     order = get_order_by_id(order_id)
     if not order or order.user_id != int(user["id"]):
         raise HTTPException(404, "Order not found.")
@@ -284,14 +295,14 @@ async def receipt(order_id: str, request: Request):
 
 @router.get("/api/mini/preferences")
 async def preferences(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     enabled = get_bot_setting(f"notifications:{user['id']}", "on").lower() == "on"
     return {"stock_alerts": enabled}
 
 
 @router.post("/api/mini/preferences")
 async def save_preferences(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     enabled = bool((await request.json()).get("stock_alerts", True))
     set_bot_setting(f"notifications:{user['id']}", "on" if enabled else "off")
     return {"stock_alerts": enabled}
@@ -299,7 +310,7 @@ async def save_preferences(request: Request):
 
 @router.get("/api/mini/admin/orders/search")
 async def admin_order_search(request: Request, query: str = ""):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     if str(user["id"]) != str(ADMIN_ID):
         raise HTTPException(403, "Admin access only.")
     query = query.strip().lower()
@@ -311,7 +322,7 @@ async def admin_order_search(request: Request, query: str = ""):
 
 @router.post("/api/mini/admin/tickets/{ticket_id}/reply")
 async def admin_ticket_reply(ticket_id: int, request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     if str(user["id"]) != str(ADMIN_ID):
         raise HTTPException(403, "Admin access only.")
     body = await request.json()
@@ -333,7 +344,7 @@ async def admin_ticket_reply(ticket_id: int, request: Request):
 
 @router.post("/api/mini/checkout")
 async def checkout(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     body = await request.json()
     try:
         coupon_id = int(body["coupon_id"])
@@ -371,7 +382,7 @@ async def checkout(request: Request):
 
 @router.get("/api/mini/orders/{order_id}/status")
 async def mini_order_status(order_id: str, request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     order = get_order_by_id(order_id)
     if not order or order.user_id != int(user["id"]):
         raise HTTPException(404, "Order not found.")
@@ -398,7 +409,7 @@ async def mini_order_status(order_id: str, request: Request):
 
 @router.post("/api/mini/tickets")
 async def create_ticket(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     body = await request.json()
     subject = str(body.get("subject", "Support request")).strip()
     message = str(body.get("message", "")).strip()
@@ -425,7 +436,7 @@ async def create_ticket(request: Request):
 
 @router.get("/api/mini/wallet")
 async def wallet(request: Request):
-    user = telegram_user(request)
+    user = await telegram_user(request)
     user_id = int(user["id"])
     return {
         "balance": get_wallet_balance(user_id),
