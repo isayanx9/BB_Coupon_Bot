@@ -497,7 +497,8 @@ async def reject_if_banned(message: Message):
 
 
 @dp.message(CommandStart())
-async def start_command(message: Message):
+async def start_command(message: Message, state: FSMContext):
+    await state.clear()
     parts = (message.text or "").split(maxsplit=1)
 
     if len(parts) == 2 and parts[1].isdigit():

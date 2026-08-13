@@ -69,7 +69,6 @@ from states.order_states import (
     FlashSaleState,
     CancelFlashSaleState,
     PriceState,
-    SettingState,
     TicketReplyState,
     UnbanState,
     WalletCreditState,
@@ -249,10 +248,11 @@ async def admin_only(message: Message):
 
 
 @router.message(F.text == "/developer")
-async def developer_panel(message: Message):
+async def developer_panel(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
+    await state.clear()
     await admin_boot_effect(message)
     await message.answer(
         "🛠 <b>FLASH-X Control Center</b>\n\n"
@@ -262,10 +262,11 @@ async def developer_panel(message: Message):
 
 
 @router.message(F.text == BTN_CONTROL_CENTER)
-async def developer_button(message: Message):
+async def developer_button(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
+    await state.clear()
     await message.answer(
         "🛠 <b>Developer Panel</b>\n\n"
         "<blockquote>Hidden admin mode is active. Normal users cannot access this panel.</blockquote>",
@@ -274,19 +275,30 @@ async def developer_button(message: Message):
 
 
 @router.message(F.text == BTN_MAIN_MENU)
-async def main_menu_button(message: Message):
+async def main_menu_button(message: Message, state: FSMContext):
     if not is_admin(message):
         return
 
+    await state.clear()
     await message.answer("🏠 <b>Main Menu</b>", reply_markup=admin_main_menu())
 
 
 @router.message(F.text == BTN_EXIT_DEVELOPER)
-async def exit_developer(message: Message):
+async def exit_developer(message: Message, state: FSMContext):
     if not is_admin(message):
         return
 
+    await state.clear()
     await message.answer("✨ <b>Control center closed.</b>", reply_markup=user_main_menu())
+
+
+@router.message(F.text == "/cancel")
+async def cancel_admin_flow(message: Message, state: FSMContext):
+    """Always release the configured admin from an unfinished input flow."""
+    if not is_admin(message):
+        return
+    await state.clear()
+    await message.answer("✅ <b>Current admin action cancelled.</b>", reply_markup=developer_menu())
 
 
 @router.message(F.text == BTN_ADD_COUPON)
@@ -425,6 +437,7 @@ async def process_bulk_coupon_non_text(message: Message):
     if not is_admin(message):
         return
 
+    await state.clear()
     await message.answer(
         "Send coupon rows as a text message:\n"
         "<code>Coupon Name|Coupon Code|Discount|Minimum Order|Price|Description</code>"
@@ -681,6 +694,7 @@ async def settings(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
+    await state.clear()
     # Settings must be immediate. A cosmetic sync animation made this screen
     # look stuck when PostgreSQL was slow or Telegram retried an update.
     try:
@@ -702,37 +716,42 @@ async def settings(message: Message, state: FSMContext):
         "<b>Useful keys</b>\n"
         "<code>maintenance_mode</code> = <code>on</code> or <code>off</code>\n"
         "<code>maintenance_text</code> = message during maintenance\n\n"
-        "<i>Send the setting key to edit.</i>"
+        "<i>Updates use a one-line command; this screen never waits for input.</i>"
     )
-    await state.set_state(SettingState.waiting_for_key)
+    # Never leave the administrator in a waiting state from this screen.
+    # This keeps /start and every reply-keyboard action immediately usable.
+    await message.answer(
+        "<i>To update a value, use:</i>\n"
+        "<code>/setsetting key value</code>\n\n"
+        "<code>/setsetting maintenance_mode on</code>"
+    )
 
 
-@router.message(SettingState.waiting_for_key)
-async def settings_key(message: Message, state: FSMContext):
-    if not is_admin(message):
+@router.message(F.text.startswith("/setsetting"))
+async def set_setting_directly(message: Message, state: FSMContext):
+    """Update one setting without retaining an FSM state between messages."""
+    if not await admin_only(message):
         return
 
-    await state.update_data(key=message.text.strip())
-    await message.answer("✍️ <b>Now send the setting value.</b>")
-    await state.set_state(SettingState.waiting_for_value)
-
-
-@router.message(SettingState.waiting_for_value)
-async def settings_value(message: Message, state: FSMContext):
-    if not is_admin(message):
+    await state.clear()
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
+        await message.answer(
+            "⚙️ <b>Usage</b>\n\n"
+            "<code>/setsetting maintenance_mode on</code>\n"
+            "<code>/setsetting maintenance_text We are upgrading now.</code>"
+        )
         return
 
-    data = await state.get_data()
-    key = data["key"]
-    value = message.text.strip()
+    key = parts[1].strip()
+    value = parts[2].strip()
     set_bot_setting(key, value)
-
     await message.answer(
         "✅ <b>Setting saved</b>\n\n"
-        f"<blockquote><code>{escape(key)}</code> = <b>{escape(value)}</b></blockquote>"
+        f"<blockquote><code>{escape(key)}</code> = <b>{escape(value)}</b></blockquote>",
+        reply_markup=developer_menu(),
     )
     audit_admin_action(message.from_user.id, "setting_update", f"{key}={value}")
-    await state.clear()
 
 
 @router.message(F.text == BTN_BAN_USER)
