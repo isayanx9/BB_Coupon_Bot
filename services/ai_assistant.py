@@ -182,6 +182,10 @@ def local_ai_answer(question):
 
 def get_ai_answer(question):
     cleaned_question = (question or "").strip()
+    # Free local FAQ mode: no external API, credits, or customer-question
+    # sharing. Keep the legacy online path below unreachable for now.
+    return local_ai_answer(cleaned_question)
+
     feedback_memory = get_feedback_memory_summary()
 
     if not cleaned_question:
@@ -231,4 +235,4 @@ def get_ai_answer(question):
 
 def get_ai_health():
     """Safe configuration status for health checks; never reveals the API key."""
-    return {"configured": bool(OPENAI_API_KEY), "model": OPENAI_MODEL}
+    return {"mode": "free_local_faq", "external_api": False}
