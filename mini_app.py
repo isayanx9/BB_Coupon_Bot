@@ -407,6 +407,12 @@ async def checkout(request: Request):
         reason = payment.get("error") or payment.get("message") or "Cashfree checkout is unavailable."
         status_code = int(payment.get("status_code") or 502)
         print(f"Cashfree order creation failed: status={status_code}, reason={str(reason)[:160]}")
+        # The gateway did not create a payable session.  Do not leave a
+        # pending order (or a partial wallet deduction) until its timer ends.
+        refunded = refund_order_wallet_if_needed(order_id, "Payment setup refund")
+        update_order_status(order_id, "FAILED")
+        if refunded:
+            reason = f"{reason} Your wallet credit was returned."
         raise HTTPException(502, f"Cashfree checkout could not start: {reason}")
     save_payment_session(order_id, session_id)
     return {"order": serialize_order(order), "payment_session_id": session_id}
