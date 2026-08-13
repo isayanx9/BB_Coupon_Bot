@@ -23,6 +23,7 @@ from aiogram.enums import ParseMode
 from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV
 from database.crud import (
     add_wallet_credit,
+    add_ticket_reply,
     audit_admin_action,
     create_order,
     create_support_ticket,
@@ -35,10 +36,13 @@ from database.crud import (
     get_coupon_type_options,
     get_coupon_summary,
     get_order_by_id,
+    get_recent_orders,
     get_referral_count,
+    get_ticket_by_id,
     get_open_tickets,
     get_bot_setting,
     get_user_orders,
+    get_user_tickets,
     get_wallet_balance,
     get_wallet_transactions,
     is_user_banned,
@@ -50,6 +54,7 @@ from database.crud import (
     track_user,
     update_delivery_status,
     update_order_status,
+    close_ticket,
 )
 from database.payment import create_cashfree_payment_link, get_cashfree_order_status
 from services.coupon_service import deliver_coupons
@@ -213,6 +218,46 @@ async def service_status(request: Request):
         "instant_delivery": "active",
         "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),
     }
+
+
+@router.get("/api/mini/tickets")
+async def user_tickets(request: Request):
+    user = telegram_user(request)
+    return {"tickets": [{"id": t.id, "subject": t.subject, "status": t.status, "messages": t.messages, "created_at": t.created_at.isoformat()} for t in get_user_tickets(int(user["id"]))]}
+
+
+@router.get("/api/mini/admin/orders/search")
+async def admin_order_search(request: Request, query: str = ""):
+    user = telegram_user(request)
+    if str(user["id"]) != str(ADMIN_ID):
+        raise HTTPException(403, "Admin access only.")
+    query = query.strip().lower()
+    orders = get_recent_orders(limit=100)
+    if query:
+        orders = [o for o in orders if query in o.order_id.lower() or query in str(o.user_id) or query in (o.coupon_code or "").lower()]
+    return {"orders": [serialize_order(order) | {"user_id": order.user_id} for order in orders[:30]]}
+
+
+@router.post("/api/mini/admin/tickets/{ticket_id}/reply")
+async def admin_ticket_reply(ticket_id: int, request: Request):
+    user = telegram_user(request)
+    if str(user["id"]) != str(ADMIN_ID):
+        raise HTTPException(403, "Admin access only.")
+    body = await request.json()
+    reply = str(body.get("message", "")).strip()
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket or len(reply) < 2:
+        raise HTTPException(422, "A valid ticket and reply are required.")
+    if not add_ticket_reply(ticket_id, "admin", reply):
+        raise HTTPException(500, "Could not save reply.")
+    close_ticket(ticket_id)
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.send_message(ticket.user_id, f"💬 <b>Admin replied to ticket #{ticket_id}</b>\n\n<blockquote>{reply}</blockquote>")
+    finally:
+        await bot.session.close()
+    audit_admin_action(int(user["id"]), "mini_ticket_reply", str(ticket_id))
+    return {"ok": True}
 
 
 @router.post("/api/mini/checkout")

@@ -990,6 +990,20 @@ def coupon_code_exists(coupon_code):
         db.close()
 
 
+def get_user_tickets(user_id, limit=20):
+    db = SessionLocal()
+    try:
+        return (
+            db.query(SupportTicket)
+            .filter(SupportTicket.user_id == user_id)
+            .order_by(SupportTicket.id.desc())
+            .limit(limit)
+            .all()
+        )
+    finally:
+        db.close()
+
+
 def get_total_coupons():
     db = SessionLocal()
 
