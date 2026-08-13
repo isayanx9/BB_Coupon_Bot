@@ -25,15 +25,15 @@ def join_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text=BTN_JOIN_CHANNEL, url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")
     kb.button(text=BTN_JOIN_GROUP, url=f"https://t.me/{GROUP_USERNAME.lstrip('@')}")
-    kb.button(text=BTN_VERIFY, callback_data="verify_user")
+    kb.button(text=BTN_VERIFY, callback_data="verify_user", style="primary")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def terms_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text=BTN_ACCEPT, callback_data="accept_terms")
-    kb.button(text=BTN_DECLINE, callback_data="decline_terms")
+    kb.button(text=BTN_ACCEPT, callback_data="accept_terms", style="success")
+    kb.button(text=BTN_DECLINE, callback_data="decline_terms", style="danger")
     kb.adjust(2)
     return kb.as_markup()
 
@@ -44,6 +44,7 @@ def launch_shop_keyboard():
         InlineKeyboardButton(
             text="🛍️ Open BB Coupon Shop",
             web_app=WebAppInfo(url=f"{PUBLIC_BASE_URL}/mini"),
+            style="primary",
         )
     )
     return kb.as_markup()

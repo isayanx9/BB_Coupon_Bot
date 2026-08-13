@@ -15,6 +15,7 @@ def coupon_list_keyboard(options):
                         f"· {option['stock']} left"
                     ),
                     callback_data=f"buy_type_{option['coupon_id']}",
+                    style="primary",
                 )
             ]
         )
@@ -24,6 +25,7 @@ def coupon_list_keyboard(options):
             InlineKeyboardButton(
                 text="🔔 Notify me when deals restock",
                 callback_data="stock_alert_ALL",
+                style="success",
             )
         ]
     )
@@ -34,7 +36,13 @@ def coupon_list_keyboard(options):
 def buy_coupon_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🛍️ Browse coupon deals", callback_data="buy_bb_coupon")]
+            [
+                InlineKeyboardButton(
+                    text="🛍️ Browse coupon deals",
+                    callback_data="buy_bb_coupon",
+                    style="primary",
+                )
+            ]
         ]
     )
 
@@ -42,8 +50,8 @@ def buy_coupon_keyboard():
 def payment_keyboard(order_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Pay securely", callback_data=f"pay_{order_id}")],
-            [InlineKeyboardButton(text="🔄 I've paid — check status", callback_data=f"recheck_{order_id}")],
-            [InlineKeyboardButton(text="❌ Cancel this order", callback_data=f"cancel_{order_id}")],
+            [InlineKeyboardButton(text="💳 Pay securely", callback_data=f"pay_{order_id}", style="success")],
+            [InlineKeyboardButton(text="🔄 I've paid — check status", callback_data=f"recheck_{order_id}", style="primary")],
+            [InlineKeyboardButton(text="❌ Cancel this order", callback_data=f"cancel_{order_id}", style="danger")],
         ]
     )
