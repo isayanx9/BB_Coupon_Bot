@@ -1,9 +1,11 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -52,6 +54,10 @@ from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 
 app = FastAPI()
 app.include_router(mini_app_router)
+# Static files mounted on an APIRouter are not included by FastAPI when the
+# router is attached to the application.  Mount them directly so the Mini App
+# can load its JavaScript and CSS in production.
+app.mount("/mini/static", StaticFiles(directory=Path(__file__).parent / "mini_app"), name="mini-static")
 telegram_bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
