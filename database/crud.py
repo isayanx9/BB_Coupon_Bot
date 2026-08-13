@@ -310,6 +310,21 @@ def claim_broadcast_message(chat_id, message_id):
         db.close()
 
 
+def claim_admin_message(action, chat_id, message_id):
+    """Deduplicate slow admin actions when Telegram retries a webhook update."""
+    db = SessionLocal()
+    claim_key = f"admin_claim:{action}:{chat_id}:{message_id}"
+    try:
+        db.add(BotSetting(key=claim_key, value="processing"))
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
 def add_feedback(user_id, order_id, rating, message):
     db = SessionLocal()
 

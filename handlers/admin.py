@@ -15,6 +15,7 @@ from database.crud import (
     add_wallet_credit,
     audit_admin_action,
     claim_broadcast_message,
+    claim_admin_message,
     ban_user,
     close_ticket,
     create_flash_sale,
@@ -307,6 +308,10 @@ async def add_coupon_button(message: Message, state: FSMContext):
 @router.message(CouponUpload.waiting_for_bulk_coupons, F.text)
 async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
+        return
+    # New-stock broadcasts can be slow, so Telegram may retry the same update.
+    # Claim it before any coupon insert to avoid a false duplicate-code reply.
+    if not claim_admin_message("bulk_coupon_upload", message.chat.id, message.message_id):
         return
 
     added = 0
