@@ -27,8 +27,16 @@
   }
 
   async function stockWatch(name) {
-    try { await call('/api/mini/stock-watch', { method: 'POST', body: JSON.stringify({ coupon_name: name }) }); window.toast('Stock alert saved. We will message you on Telegram.'); }
-    catch (error) { window.toast(error.message); }
+    const buttons = [...document.querySelectorAll(`[data-watch="${CSS.escape(name)}"]`)];
+    buttons.forEach(button => { button.disabled = true; button.textContent = 'Saving alert…'; });
+    try {
+      await call('/api/mini/stock-watch', { method: 'POST', body: JSON.stringify({ coupon_name: name }) });
+      buttons.forEach(button => { button.textContent = '✓ Restock alert enabled'; });
+      window.toast('Restock alert enabled. We will message you in Telegram when stock is added.');
+    } catch (error) {
+      buttons.forEach(button => { button.disabled = false; button.textContent = name === 'ALL' ? '🔔 Notify me when new stock arrives' : 'Notify me when this is stocked'; });
+      window.toast(error.message || 'Could not save the stock alert. Try again after joining and verifying.');
+    }
   }
 
   function receipt(id) {
