@@ -30,7 +30,7 @@ def verify_cashfree_webhook_signature(raw_body, signature, timestamp):
     return hmac.compare_digest(expected, signature)
 
 
-def create_cashfree_payment_link(order_id, amount, customer_id):
+def create_cashfree_payment_link(order_id, amount, customer_id, customer_phone=None):
     base_url = (
         "https://sandbox.cashfree.com/pg/orders"
         if CASHFREE_ENV == "sandbox"
@@ -51,6 +51,12 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         "x-api-version": "2023-08-01",
     }
 
+    # A unique verified customer phone prevents Cashfree from treating every
+    # buyer as the same profile and reusing previously saved UPI suggestions.
+    phone = str(customer_phone or CASHFREE_CUSTOMER_PHONE).strip()
+    if not phone.isdigit() or len(phone) != 10 or phone[0] not in "6789":
+        return {"error": "A valid 10-digit Indian mobile number is required for secure UPI checkout."}
+
     payload = {
         "order_id": order_id,
         "order_amount": float(amount),
@@ -62,7 +68,7 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         "customer_details": {
             "customer_id": str(customer_id),
             "customer_name": f"Telegram {customer_id}",
-            "customer_phone": CASHFREE_CUSTOMER_PHONE,
+            "customer_phone": phone,
         },
         "order_meta": {
             # UPI may temporarily open a banking app.  Returning to the Mini

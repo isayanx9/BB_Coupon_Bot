@@ -366,6 +366,11 @@ async def checkout(request: Request):
         raise HTTPException(409, "This coupon is no longer available in that quantity.")
 
     user_id = int(user["id"])
+    customer_phone = "".join(character for character in str(body.get("customer_phone", "")) if character.isdigit())
+    if len(customer_phone) == 12 and customer_phone.startswith("91"):
+        customer_phone = customer_phone[2:]
+    if len(customer_phone) != 10 or customer_phone[0] not in "6789":
+        raise HTTPException(422, "Enter your own valid 10-digit Indian mobile number for UPI checkout.")
     unit_price = get_bulk_buyer_price(user_id, coupon.coupon_name)
     unit_price = unit_price if unit_price is not None else coupon.selling_price
     order_id = create_order(
@@ -381,7 +386,7 @@ async def checkout(request: Request):
         delivered = await deliver_confirmed_order(order)
         return {"order": serialize_order(delivered), "delivered": True}
 
-    payment = create_cashfree_payment_link(order_id, order.payable_amount, user_id)
+    payment = create_cashfree_payment_link(order_id, order.payable_amount, user_id, customer_phone)
     session_id = payment.get("payment_session_id")
     if not session_id:
         raise HTTPException(502, payment.get("error") or payment.get("message") or "Cashfree checkout is unavailable.")
