@@ -96,6 +96,15 @@ async def telegram_user(request: Request):
     # payment issues even if an old ban record exists.
     if str(user_id) != str(ADMIN_ID) and is_user_banned(user_id):
         raise HTTPException(403, "This account is restricted.")
+    if (
+        str(user_id) != str(ADMIN_ID)
+        and get_bot_setting("maintenance_mode", "off").lower() == "on"
+    ):
+        raise HTTPException(503, "Shop maintenance is active. Please return after the upgrade.")
+    # The configured owner never needs to join gates while repairing the shop.
+    if str(user_id) == str(ADMIN_ID):
+        track_user(user_id, user.get("username"))
+        return user
     cached_until = _membership_cache.get(user_id)
     if cached_until and cached_until > datetime.now(timezone.utc).timestamp():
         track_user(user_id, user.get("username"))

@@ -23,9 +23,9 @@ CASHFREE_CLIENT_ID = os.getenv("CASHFREE_CLIENT_ID")
 CASHFREE_CLIENT_SECRET = os.getenv("CASHFREE_CLIENT_SECRET")
 CASHFREE_ENV = os.getenv("CASHFREE_ENV", "production").strip().lower()
 CASHFREE_CUSTOMER_PHONE = os.getenv("CASHFREE_CUSTOMER_PHONE", "").strip()
-# The same configured server value creates Cashfree's order expiry and drives
-# the Mini App's live countdown, so the UI never promises a different window.
-PAYMENT_EXPIRY_MINUTES = max(1, int(os.getenv("PAYMENT_EXPIRY_MINUTES", "5")))
+# Cashfree requires an expiry greater than 15 minutes. The same server value
+# creates the Cashfree expiry and drives the Mini App's live countdown.
+PAYMENT_EXPIRY_MINUTES = max(16, int(os.getenv("PAYMENT_EXPIRY_MINUTES", "16")))
 RUN_BOT_POLLING = os.getenv("RUN_BOT_POLLING", "false").lower() == "true"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()

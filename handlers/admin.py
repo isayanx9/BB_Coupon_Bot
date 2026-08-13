@@ -681,8 +681,13 @@ async def settings(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
-    await admin_sync_effect(message, "Settings sync")
-    settings_list = get_all_bot_settings()
+    # Settings must be immediate. A cosmetic sync animation made this screen
+    # look stuck when PostgreSQL was slow or Telegram retried an update.
+    try:
+        settings_list = get_all_bot_settings()
+    except Exception:
+        await message.answer("⚠️ <b>Settings could not load.</b> Try again in a moment; no setting was changed.")
+        return
     settings_text = "\n".join(
         f"<code>{escape(setting.key)}</code> = <b>{escape(setting.value)}</b>"
         for setting in settings_list
