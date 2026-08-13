@@ -26,6 +26,7 @@ from database.crud import (
     create_order,
     create_support_ticket,
     claim_order_delivery,
+    expire_order_if_needed,
     get_bulk_buyer_price,
     get_analytics_snapshot,
     get_coupon_by_id,
@@ -42,6 +43,7 @@ from database.crud import (
     save_payment_session,
     save_order_coupon_code,
     release_order_delivery_claim,
+    refund_order_wallet_if_needed,
     track_user,
     update_delivery_status,
     update_order_status,
@@ -150,13 +152,18 @@ async def bootstrap(request: Request):
         special_price = get_bulk_buyer_price(user_id, coupon["coupon_name"])
         if special_price is not None:
             coupon["price"] = special_price
+    orders = get_user_orders(user_id)[:20]
+    for order in orders:
+        if order.payment_status == "PENDING" and expire_order_if_needed(order.order_id):
+            refund_order_wallet_if_needed(order.order_id, "Payment expiry refund")
+    orders = get_user_orders(user_id)[:20]
     return {
         "user": {"first_name": user.get("first_name", "Friend"), "username": user.get("username")},
         "is_admin": str(user_id) == str(ADMIN_ID),
         "coupons": coupons,
         "wallet_balance": get_wallet_balance(user_id),
         "referrals": get_referral_count(user_id),
-        "orders": [serialize_order(order) for order in get_user_orders(user_id)[:20]],
+        "orders": [serialize_order(order) for order in orders],
         "cashfree_mode": CASHFREE_ENV,
     }
 
@@ -221,6 +228,10 @@ async def mini_order_status(order_id: str, request: Request):
     order = get_order_by_id(order_id)
     if not order or order.user_id != int(user["id"]):
         raise HTTPException(404, "Order not found.")
+
+    if order.payment_status == "PENDING" and expire_order_if_needed(order_id):
+        refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        return {"order": serialize_order(get_order_by_id(order_id))}
 
     if order.payment_status == "PENDING":
         # requests is synchronous in the Cashfree client; keep it off the
