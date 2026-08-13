@@ -20,7 +20,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV, CHANNEL_USERNAME, GROUP_USERNAME
+from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV, CHANNEL_USERNAME, GROUP_USERNAME, PUBLIC_BASE_URL
 from database.crud import (
     add_wallet_credit,
     add_ticket_reply,
@@ -415,7 +415,12 @@ async def checkout(request: Request):
             reason = f"{reason} Your wallet credit was returned."
         raise HTTPException(502, f"Cashfree checkout could not start: {reason}")
     save_payment_session(order_id, session_id)
-    return {"order": serialize_order(order), "payment_session_id": session_id}
+    return {
+        "order": serialize_order(order),
+        "payment_session_id": session_id,
+        # This short-lived endpoint launches Cashfree's full hosted checkout.
+        "checkout_url": f"{PUBLIC_BASE_URL}/pay/{order_id}",
+    }
 
 
 @router.get("/api/mini/orders/{order_id}/status")

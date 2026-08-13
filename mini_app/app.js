@@ -1,4 +1,6 @@
 const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#10131f'); tg?.setBackgroundColor?.('#10131f');
+const paymentStartParam=tg?.initDataUnsafe?.start_param||'';
+if(paymentStartParam.startsWith('order-')&&!new URLSearchParams(location.search).get('order_id'))history.replaceState(null,'','?order_id='+encodeURIComponent(paymentStartParam.slice(6)));
 const state={data:null,quantity:1,selected:null,watching:false};
 window.state=state;
 const $=s=>document.querySelector(s); const toast=t=>{const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2800)};

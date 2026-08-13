@@ -56,6 +56,7 @@ from mini_app import router as mini_app_router
 from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
 from services.ai_assistant import get_ai_health
+from texts import BOT_USERNAME
 
 app = FastAPI()
 app.include_router(mini_app_router)
@@ -437,6 +438,7 @@ async def pay_page(order_id: str):
 @app.get("/payment-result/{order_id}")
 async def payment_result(order_id: str, status: str = ""):
     safe_status = (status or "CHECKING").upper()
+    telegram_return = f"https://t.me/{BOT_USERNAME}?startapp=order-{order_id}"
     return HTMLResponse(
         f"""
         <!doctype html>
@@ -478,8 +480,14 @@ async def payment_result(order_id: str, status: str = ""):
                     Order: <code>{order_id}</code><br>
                     Status: <code>{safe_status}</code>
                 </blockquote>
-                <p>Return to the BB Coupon Shop in Telegram. Payment confirmation and coupon delivery run automatically.</p>
+                <p>Returning you to BB Coupon Shop in Telegram…</p>
+                <p>Payment confirmation and coupon delivery run automatically.</p>
             </main>
+            <script>
+                // Browsers cannot reliably close themselves after a payment.
+                // Opening Telegram after three seconds returns to the Mini App.
+                window.setTimeout(() => window.location.replace("{telegram_return}"), 3000);
+            </script>
         </body>
         </html>
         """

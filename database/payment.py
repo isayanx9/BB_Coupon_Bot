@@ -71,10 +71,10 @@ def create_cashfree_payment_link(order_id, amount, customer_id, customer_phone=N
             "customer_phone": phone,
         },
         "order_meta": {
-            # UPI may temporarily open a banking app.  Returning to the Mini
-            # App lets the authenticated storefront resume status polling and
-            # display the delivered code instead of a generic return page.
-            "return_url": f"{PUBLIC_BASE_URL}/mini?order_id={order_id}&status={{order_status}}",
+            # Cashfree's hosted checkout can open any supported UPI/payment
+            # app. Its return page moves the buyer back into Telegram, where
+            # the authenticated Mini App resumes payment verification.
+            "return_url": f"{PUBLIC_BASE_URL}/payment-result/{order_id}?status={{order_status}}",
             "notify_url": f"{PUBLIC_BASE_URL}/webhook/cashfree",
         },
     }
