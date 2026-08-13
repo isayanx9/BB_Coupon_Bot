@@ -20,18 +20,21 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from config import BOT_TOKEN, CASHFREE_ENV
+from config import ADMIN_ID, BOT_TOKEN, CASHFREE_ENV
 from database.crud import (
     add_wallet_credit,
     create_order,
     create_support_ticket,
     claim_order_delivery,
     get_bulk_buyer_price,
+    get_analytics_snapshot,
     get_coupon_by_id,
     get_coupon_stock,
     get_coupon_type_options,
+    get_coupon_summary,
     get_order_by_id,
     get_referral_count,
+    get_open_tickets,
     get_user_orders,
     get_wallet_balance,
     get_wallet_transactions,
@@ -149,11 +152,28 @@ async def bootstrap(request: Request):
             coupon["price"] = special_price
     return {
         "user": {"first_name": user.get("first_name", "Friend"), "username": user.get("username")},
+        "is_admin": str(user_id) == str(ADMIN_ID),
         "coupons": coupons,
         "wallet_balance": get_wallet_balance(user_id),
         "referrals": get_referral_count(user_id),
         "orders": [serialize_order(order) for order in get_user_orders(user_id)[:20]],
         "cashfree_mode": CASHFREE_ENV,
+    }
+
+
+@router.get("/api/mini/admin/overview")
+async def admin_overview(request: Request):
+    """Protected, read-only Mini App dashboard for the configured admin."""
+    user = telegram_user(request)
+    if str(user["id"]) != str(ADMIN_ID):
+        raise HTTPException(403, "Admin access only.")
+    return {
+        "analytics": get_analytics_snapshot(),
+        "coupons": get_coupon_summary(limit=8),
+        "tickets": [
+            {"id": ticket.id, "subject": ticket.subject, "status": ticket.status}
+            for ticket in get_open_tickets(limit=8)
+        ],
     }
 
 

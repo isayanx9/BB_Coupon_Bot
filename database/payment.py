@@ -65,7 +65,10 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
             "customer_phone": CASHFREE_CUSTOMER_PHONE,
         },
         "order_meta": {
-            "return_url": f"{PUBLIC_BASE_URL}/payment-result/{order_id}?status={{order_status}}",
+            # UPI may temporarily open a banking app.  Returning to the Mini
+            # App lets the authenticated storefront resume status polling and
+            # display the delivered code instead of a generic return page.
+            "return_url": f"{PUBLIC_BASE_URL}/mini?order_id={order_id}&status={{order_status}}",
             "notify_url": f"{PUBLIC_BASE_URL}/webhook/cashfree",
         },
     }
