@@ -1,4 +1,7 @@
 import requests
+import base64
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 
 from config import (
@@ -6,8 +9,25 @@ from config import (
     CASHFREE_CLIENT_SECRET,
     CASHFREE_CUSTOMER_PHONE,
     CASHFREE_ENV,
+    PAYMENT_EXPIRY_MINUTES,
     PUBLIC_BASE_URL,
 )
+
+
+def verify_cashfree_webhook_signature(raw_body, signature, timestamp):
+    """Validate Cashfree's HMAC-SHA256 signature against the exact raw body."""
+    if not raw_body or not signature or not timestamp or not CASHFREE_CLIENT_SECRET:
+        return False
+
+    signed_payload = str(timestamp).encode("utf-8") + raw_body
+    expected = base64.b64encode(
+        hmac.new(
+            CASHFREE_CLIENT_SECRET.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
 
 
 def create_cashfree_payment_link(order_id, amount, customer_id):
@@ -36,7 +56,8 @@ def create_cashfree_payment_link(order_id, amount, customer_id):
         "order_amount": float(amount),
         "order_currency": "INR",
         "order_expiry_time": (
-            datetime.now(timezone.utc) + timedelta(minutes=5)
+            datetime.now(timezone.utc)
+            + timedelta(minutes=PAYMENT_EXPIRY_MINUTES)
         ).isoformat(),
         "customer_details": {
             "customer_id": str(customer_id),

@@ -1,5 +1,12 @@
 .env
 venv/
+.venv/
 __pycache__/
 *.pyc
 node_modules/
+BB_Coupon_Bot_full_snapshot_*/
+*_backup_*.zip
+github_recovered_*.zip
+railway_code_backup_*.zip
+recreated_backup_*.zip
+safety_backup_*.zip

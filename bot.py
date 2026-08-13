@@ -13,8 +13,10 @@ from config import (
     BOT_TOKEN,
     CHANNEL_USERNAME,
     GROUP_USERNAME,
+    PAYMENT_EXPIRY_MINUTES,
     PUBLIC_BASE_URL,
     require_env,
+    RUN_BOT_POLLING,
 )
 from database.crud import (
     add_feedback,
@@ -22,6 +24,7 @@ from database.crud import (
     create_order,
     create_referral,
     create_support_ticket,
+    claim_order_delivery,
     delete_bot_setting,
     expire_order_if_needed,
     get_bot_setting,
@@ -36,6 +39,7 @@ from database.crud import (
     get_wallet_transactions,
     is_user_banned,
     refund_order_wallet_if_needed,
+    release_order_delivery_claim,
     reward_referral_if_needed,
     save_order_coupon_code,
     save_payment_session,
@@ -78,6 +82,19 @@ from texts import (
 dp = Dispatcher()
 
 
+@dp.callback_query.outer_middleware()
+async def restrict_user_callbacks(handler, event, data):
+    """Apply ban and maintenance checks to every existing inline button."""
+    if str(event.from_user.id) != str(ADMIN_ID):
+        if is_user_banned(event.from_user.id):
+            await event.answer("Access blocked.", show_alert=True)
+            return
+        if get_bot_setting("maintenance_mode", "off").lower() == "on":
+            await event.answer("The bot is under maintenance. Please try again soon.", show_alert=True)
+            return
+    return await handler(event, data)
+
+
 def format_payment_error(data):
     if not isinstance(data, dict):
         return escape(str(data))
@@ -96,11 +113,8 @@ def format_payment_error(data):
 
 
 def get_order_quantity(order_id):
-    value = get_bot_setting(f"order_quantity:{order_id}", "1")
-    try:
-        return max(1, int(value))
-    except (TypeError, ValueError):
-        return 1
+    order = get_order_by_id(order_id)
+    return max(1, int(order.quantity or 1)) if order else 1
 
 
 def feedback_keyboard(order_id):
@@ -757,13 +771,14 @@ async def pay_order(callback: CallbackQuery):
         refunded = refund_order_wallet_if_needed(order_id, "Payment expiry refund")
         await callback.message.answer(
             "<b>Payment window expired.</b>\n\n"
-            "<blockquote>This order was marked failed after 5 minutes. Create a new order to pay.</blockquote>"
+            f"<blockquote>This order was marked failed after {PAYMENT_EXPIRY_MINUTES} minutes. Create a new order to pay.</blockquote>"
             + ("\n\n<b>Wallet credits were returned.</b>" if refunded else "")
         )
         await callback.answer()
         return
 
-    data = create_cashfree_payment_link(
+    data = await asyncio.to_thread(
+        create_cashfree_payment_link,
         order_id=order_id,
         amount=order.payable_amount or order.amount,
         customer_id=callback.from_user.id,
@@ -820,6 +835,9 @@ async def finalize_paid_order(order_id, bot: Bot):
     if order.delivery_status == "DELIVERED":
         return True, "Already delivered."
 
+    if order.delivery_status == "PROCESSING" or not claim_order_delivery(order_id):
+        return False, "This order is already being delivered."
+
     if order.coupon_name == "WALLET_TOPUP":
         add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
         update_order_status(order_id, "SUCCESS")
@@ -843,6 +861,7 @@ async def finalize_paid_order(order_id, bot: Bot):
 
     if len(coupon_codes) < quantity:
         refund_order_wallet_if_needed(order_id, "Delivery refund")
+        release_order_delivery_claim(order_id)
         return False, "Not enough unsold coupon stock available for this order."
 
     delivered_codes = "\n".join(coupon_codes)
@@ -968,6 +987,10 @@ async def cancel_order(callback: CallbackQuery):
     order_id = callback.data.replace("cancel_", "")
     await flash_effect(callback, FLASH_CANCEL_TEXT)
     order = get_order_by_id(order_id)
+
+    if not order or order.user_id != callback.from_user.id:
+        await callback.answer("This order belongs to another user.", show_alert=True)
+        return
 
     if order and (
         order.payment_status == "SUCCESS"
@@ -1210,7 +1233,8 @@ async def wallet_topup_amount(message: Message, state: FSMContext, bot: Bot):
         return
 
     order = get_order_by_id(order_id)
-    data = create_cashfree_payment_link(
+    data = await asyncio.to_thread(
+        create_cashfree_payment_link,
         order_id=order_id,
         amount=amount,
         customer_id=message.from_user.id,
@@ -1359,12 +1383,18 @@ async def ai_assist_start(message: Message, state: FSMContext):
 @dp.message(AIAssist.waiting_for_question)
 async def ai_assist_answer(message: Message, state: FSMContext):
     await ai_typing_effect(message)
-    answer = get_ai_answer(message.text or "")
+    answer = await asyncio.to_thread(get_ai_answer, message.text or "")
     await message.answer(answer if "<" in answer else escape(answer))
     await state.clear()
 
 
 async def main():
+    if not RUN_BOT_POLLING:
+        raise RuntimeError(
+            "Polling is disabled. Use launcher.py for webhook deployment, or set "
+            "RUN_BOT_POLLING=true for a deliberate local polling session."
+        )
+
     require_env()
     initialize_database(Base)
 

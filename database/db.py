@@ -10,7 +10,7 @@ from config import DATABASE_URL
 LOCAL_DATABASE_URL = "sqlite:///database/bot.db"
 ALLOW_SQLITE_FALLBACK = os.getenv(
     "ALLOW_SQLITE_FALLBACK",
-    "true",
+    "false",
 ).lower() == "true"
 
 

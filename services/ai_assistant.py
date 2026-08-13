@@ -19,7 +19,7 @@ unsold coupon stock, and edit settings like maintenance_mode.
 Payment flow: user selects a coupon, the bot creates an order, Cashfree creates
 a payment_session_id, the Pay Securely button opens /pay/<order_id>, Cashfree
 redirects to /payment-result/<order_id>, and webhook /webhook/cashfree marks
-SUCCESS/PAID/ACTIVE orders as paid. If payment is debited but coupon is not
+SUCCESS orders as paid. If payment is debited but coupon is not
 delivered, user should press I Paid, Recheck and send Order ID plus screenshot
 to support. Admin should verify PUBLIC_BASE_URL, Cashfree production/sandbox
 keys, CASHFREE_ENV, webhook URL, and coupon stock.
@@ -118,8 +118,8 @@ def answer_body(intent):
         return (
             "If Postgres was deleted, add a new Railway Postgres service and "
             "connect its <code>DATABASE_URL</code>. The bot now retries the DB "
-            "and can fall back to local SQLite so it does not crash, but Railway "
-            "Postgres is still recommended for real orders."
+            "and restart the service. Production orders require Postgres; the bot "
+            "does not fall back to local SQLite."
         )
 
     if intent == "admin":

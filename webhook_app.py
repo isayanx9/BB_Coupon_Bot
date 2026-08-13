@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -17,10 +18,12 @@ from config import (
     CASHFREE_CLIENT_SECRET,
     CASHFREE_ENV,
     PUBLIC_BASE_URL,
+    PAYMENT_EXPIRY_MINUTES,
     require_env,
 )
 from database.crud import (
     add_wallet_credit,
+    claim_order_delivery,
     get_analytics_snapshot,
     get_coupon_summary,
     get_open_tickets,
@@ -32,6 +35,7 @@ from database.crud import (
     get_recent_audit_logs,
     get_wallet_balance,
     refund_order_wallet_if_needed,
+    release_order_delivery_claim,
     save_order_coupon_code,
     update_delivery_status,
     update_order_status,
@@ -39,6 +43,7 @@ from database.crud import (
 import database.db as database_db
 from database.db import initialize_database
 from database.models import Base
+from database.payment import verify_cashfree_webhook_signature
 from bot import dp
 from handlers.admin import router as admin_router
 from mini_app import router as mini_app_router
@@ -56,7 +61,7 @@ payment_expiry_task = None
 
 
 async def payment_expiry_worker():
-    """Keep pending orders from remaining payable after their 5-minute window."""
+    """Keep pending orders from remaining payable after their Cashfree window."""
     while True:
         for order_id in expire_due_orders():
             refund_order_wallet_if_needed(order_id, "Payment expiry refund")
@@ -64,11 +69,8 @@ async def payment_expiry_worker():
 
 
 def get_order_quantity(order_id):
-    value = get_bot_setting(f"order_quantity:{order_id}", "1")
-    try:
-        return max(1, int(value))
-    except (TypeError, ValueError):
-        return 1
+    order = get_order_by_id(order_id)
+    return max(1, int(order.quantity or 1)) if order else 1
 
 
 def feedback_keyboard(order_id):
@@ -352,7 +354,7 @@ async def pay_page(order_id: str):
                 <em>Order ID:</em> <code>{order_id}</code>
             </blockquote>
             <p class="status">Flash redirect is starting. Please do not close this page.</p>
-            <p class="status">Payment window: <span id="paymentTimer">05:00</span></p>
+            <p class="status">Payment window: <span id="paymentTimer">{PAYMENT_EXPIRY_MINUTES}:00</span></p>
             <button type="button" id="retryCheckout">Open secure checkout</button>
         </main>
 
@@ -446,8 +448,16 @@ async def cashfree_webhook_health():
 
 @app.post("/webhook/cashfree")
 async def cashfree_webhook(request: Request):
+    raw_body = await request.body()
+    if not verify_cashfree_webhook_signature(
+        raw_body,
+        request.headers.get("x-webhook-signature"),
+        request.headers.get("x-webhook-timestamp"),
+    ):
+        return JSONResponse({"success": False, "detail": "Invalid webhook signature"}, status_code=401)
+
     try:
-        data = await request.json()
+        data = json.loads(raw_body)
     except Exception:
         data = {}
 
@@ -478,7 +488,12 @@ async def cashfree_webhook(request: Request):
         if not order_id:
             return JSONResponse({"success": True, "received": True})
 
-        if payment_status in {"SUCCESS", "PAID", "ACTIVE"} and order_id:
+        if payment_status in {"FAILED", "USER_DROPPED"}:
+            update_order_status(order_id, "FAILED")
+            refund_order_wallet_if_needed(order_id, "Cashfree payment failure refund")
+            return JSONResponse({"success": True, "payment_failed": True})
+
+        if payment_status == "SUCCESS" and order_id:
             if expire_order_if_needed(order_id):
                 refund_order_wallet_if_needed(order_id, "Payment expiry refund")
                 return JSONResponse({"success": True, "expired": True})
@@ -488,6 +503,9 @@ async def cashfree_webhook(request: Request):
             if order:
                 if order.delivery_status == "DELIVERED":
                     return JSONResponse({"success": True, "already_delivered": True})
+
+                if not claim_order_delivery(order_id):
+                    return JSONResponse({"success": True, "already_processing": True})
 
                 if order.coupon_name == "WALLET_TOPUP":
                     add_wallet_credit(order.user_id, order.amount, f"Wallet top up for {order.order_id}")
@@ -556,10 +574,13 @@ async def cashfree_webhook(request: Request):
                     print(f"Coupon delivered: {coupon_code}")
                 else:
                     refund_order_wallet_if_needed(order_id, "Delivery refund")
+                    release_order_delivery_claim(order_id)
 
         return JSONResponse({"success": True})
 
     except Exception as error:
+        if "order_id" in locals() and order_id:
+            release_order_delivery_claim(order_id)
         print("Webhook error:")
         print(error)
         return JSONResponse({"success": False})

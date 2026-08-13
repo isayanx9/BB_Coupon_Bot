@@ -14,11 +14,13 @@ from database.models import (
     User,
     WalletTransaction,
 )
-from sqlalchemy import text, MetaData
+from sqlalchemy import text, MetaData, or_, and_
 from sqlalchemy.exc import IntegrityError
 
 import uuid
 from datetime import datetime, timedelta
+
+from config import PAYMENT_EXPIRY_MINUTES
 
 
 def track_user(telegram_id, username=None):
@@ -1179,7 +1181,9 @@ def create_order(
             wallet_used=wallet_used,
             payable_amount=payable_amount,
             quantity=max(1, int(quantity or 1)),
-            payment_expires_at=datetime.utcnow() + timedelta(minutes=5),
+            payment_expires_at=(
+                datetime.utcnow() + timedelta(minutes=PAYMENT_EXPIRY_MINUTES)
+            ),
             payment_status="PENDING",
             delivery_status="NOT_DELIVERED"
         )
@@ -1359,8 +1363,13 @@ def expire_order_if_needed(order_id):
             .filter(
                 Order.order_id == order_id,
                 Order.payment_status == "PENDING",
-                Order.payment_expires_at.isnot(None),
-                Order.payment_expires_at <= datetime.utcnow(),
+                or_(
+                    Order.payment_expires_at <= datetime.utcnow(),
+                    and_(
+                        Order.payment_expires_at.is_(None),
+                        Order.created_at <= datetime.utcnow() - timedelta(minutes=PAYMENT_EXPIRY_MINUTES),
+                    ),
+                ),
             )
             .update({Order.payment_status: "FAILED"}, synchronize_session=False)
         )
@@ -1383,8 +1392,13 @@ def expire_due_orders():
                 db.query(Order.order_id)
                 .filter(
                     Order.payment_status == "PENDING",
-                    Order.payment_expires_at.isnot(None),
-                    Order.payment_expires_at <= datetime.utcnow(),
+                    or_(
+                        Order.payment_expires_at <= datetime.utcnow(),
+                        and_(
+                            Order.payment_expires_at.is_(None),
+                            Order.created_at <= datetime.utcnow() - timedelta(minutes=PAYMENT_EXPIRY_MINUTES),
+                        ),
+                    ),
                 )
                 .all()
             )
@@ -1570,8 +1584,14 @@ def update_order_status(
         )
 
         if order:
+            current_status = (order.payment_status or "PENDING").upper()
+            next_status = (status or "").upper()
+            if current_status == "SUCCESS" and next_status != "SUCCESS":
+                return False
+            if current_status in {"FAILED", "CANCELLED"} and next_status != current_status:
+                return False
 
-            order.payment_status = status
+            order.payment_status = next_status
 
             db.commit()
 
@@ -1624,6 +1644,48 @@ def update_delivery_status(
 
     finally:
         db.close()        
+
+
+def claim_order_delivery(order_id):
+    """Atomically reserve a paid order for one delivery worker."""
+    db = SessionLocal()
+    try:
+        claimed = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id,
+                Order.delivery_status == "NOT_DELIVERED",
+            )
+            .update({Order.delivery_status: "PROCESSING"}, synchronize_session=False)
+        )
+        db.commit()
+        return bool(claimed)
+    except Exception:
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
+def release_order_delivery_claim(order_id):
+    """Make a failed delivery attempt retryable without changing paid status."""
+    db = SessionLocal()
+    try:
+        released = (
+            db.query(Order)
+            .filter(
+                Order.order_id == order_id,
+                Order.delivery_status == "PROCESSING",
+            )
+            .update({Order.delivery_status: "NOT_DELIVERED"}, synchronize_session=False)
+        )
+        db.commit()
+        return bool(released)
+    except Exception:
+        db.rollback()
+        return False
+    finally:
+        db.close()
 
 
 def get_recent_orders(limit=25):
