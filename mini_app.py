@@ -389,7 +389,10 @@ async def checkout(request: Request):
     payment = create_cashfree_payment_link(order_id, order.payable_amount, user_id, customer_phone)
     session_id = payment.get("payment_session_id")
     if not session_id:
-        raise HTTPException(502, payment.get("error") or payment.get("message") or "Cashfree checkout is unavailable.")
+        reason = payment.get("error") or payment.get("message") or "Cashfree checkout is unavailable."
+        status_code = int(payment.get("status_code") or 502)
+        print(f"Cashfree order creation failed: status={status_code}, reason={str(reason)[:160]}")
+        raise HTTPException(502, f"Cashfree checkout could not start: {reason}")
     save_payment_session(order_id, session_id)
     return {"order": serialize_order(order), "payment_session_id": session_id}
 

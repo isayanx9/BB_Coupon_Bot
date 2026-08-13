@@ -102,7 +102,10 @@ def create_cashfree_payment_link(order_id, amount, customer_id, customer_phone=N
         }
 
     if response.status_code >= 400:
-        data.setdefault("error", "Cashfree rejected the order")
+        # Pass only Cashfree's public validation message to the storefront.
+        # Do not include request headers, secrets, or raw customer payloads.
+        public_message = data.get("message") or data.get("error_description") or data.get("type")
+        data["error"] = str(public_message or "Cashfree rejected the order")[:300]
         data.setdefault("status_code", response.status_code)
 
     return data
