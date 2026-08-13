@@ -4,6 +4,7 @@ The browser is intentionally never trusted with a Telegram user id, prices,
 stock, or payment status.  Every API call validates Telegram WebApp initData.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -15,6 +16,10 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
 from config import BOT_TOKEN, CASHFREE_ENV
 from database.crud import (
     add_wallet_credit,
@@ -25,6 +30,7 @@ from database.crud import (
     get_coupon_by_id,
     get_coupon_stock,
     get_coupon_type_options,
+    get_order_by_id,
     get_referral_count,
     get_user_orders,
     get_wallet_balance,
@@ -37,7 +43,7 @@ from database.crud import (
     update_delivery_status,
     update_order_status,
 )
-from database.payment import create_cashfree_payment_link
+from database.payment import create_cashfree_payment_link, get_cashfree_order_status
 from services.coupon_service import deliver_coupons
 
 ROOT = Path(__file__).parent / "mini_app"
@@ -90,6 +96,43 @@ def serialize_order(order):
     }
 
 
+async def deliver_confirmed_order(order):
+    """Claim and deliver exactly once after Cashfree confirms a Mini App order."""
+    if order.delivery_status == "DELIVERED":
+        return get_order_by_id(order.order_id)
+    if not claim_order_delivery(order.order_id):
+        return get_order_by_id(order.order_id)
+
+    codes, _ = deliver_coupons(order.coupon_name, order.quantity or 1)
+    if len(codes) != (order.quantity or 1):
+        release_order_delivery_claim(order.order_id)
+        if order.payable_amount == 0 and order.wallet_used:
+            add_wallet_credit(
+                order.user_id,
+                order.wallet_used,
+                f"Wallet refund for {order.order_id}",
+            )
+            update_order_status(order.order_id, "FAILED")
+        raise HTTPException(409, "Payment received, but stock changed. Support has been notified.")
+
+    save_order_coupon_code(order.order_id, ", ".join(codes))
+    update_order_status(order.order_id, "SUCCESS")
+    update_delivery_status(order.order_id, "DELIVERED")
+    delivered = get_order_by_id(order.order_id)
+
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.send_message(
+            order.user_id,
+            "🎉 <b>Payment successful — coupon delivered</b>\n\n"
+            f"<blockquote>🆔 Order: <code>{order.order_id}</code>\n"
+            f"🎟 Code:\n<code>{delivered.coupon_code}</code></blockquote>",
+        )
+    finally:
+        await bot.session.close()
+    return delivered
+
+
 @router.get("/mini")
 async def mini_app_home():
     return FileResponse(ROOT / "index.html", media_type="text/html")
@@ -137,23 +180,12 @@ async def checkout(request: Request):
     if not order_id:
         raise HTTPException(500, "Could not create your order. Please try again.")
 
-    from database.crud import get_order_by_id
     order = get_order_by_id(order_id)
     if order.payable_amount == 0:
-        # A fully wallet-funded order does not need a gateway callback.  It is
-        # still delivered only on the server, with the same stock claim pattern.
-        if not claim_order_delivery(order_id):
-            raise HTTPException(409, "This order is already being delivered.")
-        codes, _ = deliver_coupons(order.coupon_name, quantity)
-        if len(codes) != quantity:
-            release_order_delivery_claim(order_id)
-            add_wallet_credit(user_id, order.wallet_used, f"Wallet refund for {order_id}")
-            update_order_status(order_id, "FAILED")
-            raise HTTPException(409, "Stock changed while completing your order. Contact support.")
-        save_order_coupon_code(order_id, ", ".join(codes))
-        update_order_status(order_id, "SUCCESS")
-        update_delivery_status(order_id, "DELIVERED")
-        return {"order": serialize_order(get_order_by_id(order_id)), "delivered": True}
+        # A fully wallet-funded order is still claimed and delivered by the
+        # same exactly-once server-side path as a gateway-paid order.
+        delivered = await deliver_confirmed_order(order)
+        return {"order": serialize_order(delivered), "delivered": True}
 
     payment = create_cashfree_payment_link(order_id, order.payable_amount, user_id)
     session_id = payment.get("payment_session_id")
@@ -161,6 +193,29 @@ async def checkout(request: Request):
         raise HTTPException(502, payment.get("error") or payment.get("message") or "Cashfree checkout is unavailable.")
     save_payment_session(order_id, session_id)
     return {"order": serialize_order(order), "payment_session_id": session_id}
+
+
+@router.get("/api/mini/orders/{order_id}/status")
+async def mini_order_status(order_id: str, request: Request):
+    user = telegram_user(request)
+    order = get_order_by_id(order_id)
+    if not order or order.user_id != int(user["id"]):
+        raise HTTPException(404, "Order not found.")
+
+    if order.payment_status == "PENDING":
+        # requests is synchronous in the Cashfree client; keep it off the
+        # FastAPI event loop while the Mini App polls for confirmation.
+        payment = await asyncio.to_thread(get_cashfree_order_status, order_id)
+        status = str(
+            payment.get("order_status") or payment.get("payment_status") or payment.get("status") or ""
+        ).upper()
+        if status in {"PAID", "SUCCESS"}:
+            update_order_status(order_id, "SUCCESS")
+            order = await deliver_confirmed_order(get_order_by_id(order_id))
+    elif order.payment_status == "SUCCESS" and order.delivery_status != "DELIVERED":
+        order = await deliver_confirmed_order(order)
+
+    return {"order": serialize_order(get_order_by_id(order_id))}
 
 
 @router.post("/api/mini/tickets")
