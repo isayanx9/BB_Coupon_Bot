@@ -1,6 +1,6 @@
 from html import escape
 
-from database.crud import get_stock_alert_user_ids
+from database.crud import get_bot_setting, get_stock_alert_user_ids
 
 
 SMART_STOCK_LEVELS = {5, 3, 1, 0}
@@ -53,6 +53,8 @@ async def notify_stock_alerts(bot, coupon_name, stock_count, reason="low_stock")
     sent = 0
 
     for user_id in user_ids:
+        if get_bot_setting(f"notifications:{user_id}", "on").lower() != "on":
+            continue
         try:
             await bot.send_message(chat_id=user_id, text=message)
             sent += 1

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/mini/static/style.css">
   <link rel="stylesheet" href="/mini/static/pages.css">
   <link rel="stylesheet" href="/mini/static/fixes.css">
+  <link rel="stylesheet" href="/mini/static/features.css">
 </head>
 <body>
   <main id="app">
@@ -32,6 +33,7 @@
         <button class="quick gold" data-view="wallet"><span>▱</span><b id="wallet">₹0</b><small>Wallet</small></button>
       </section>
       <section class="coupon-header"><div><p>LIMITED DROP</p><h2>Live coupons</h2></div><button data-view="refer">🎁 Refer</button></section>
+      <section id="flash-sales" class="flash-stack"></section>
       <div id="coupons" class="coupon-grid"></div>
       </div>
       <section id="page" class="full-page" hidden></section>
@@ -41,5 +43,6 @@
   </main>
   <div id="toast"></div>
   <script src="/mini/static/app.js"></script>
+  <script src="/mini/static/features.js"></script>
 </body>
 </html>

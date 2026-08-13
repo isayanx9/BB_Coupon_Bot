@@ -1,5 +1,6 @@
 const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#10131f'); tg?.setBackgroundColor?.('#10131f');
 const state={data:null,quantity:1,selected:null,watching:false};
+window.state=state;
 const $=s=>document.querySelector(s); const toast=t=>{const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2800)};
 async function api(path,options={}){let r;try{r=await fetch(path,{...options,headers:{'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})}catch(_){throw Error('Connection paused while UPI is open. Return to Telegram and the order will resume automatically.')}let d;try{d=await r.json()}catch(_){throw Error('The secure payment page is returning. Please wait a moment.')}if(!r.ok)throw Error(d.detail||'Something went wrong');return d}
 const money=n=>'₹'+Number(n||0).toLocaleString('en-IN');

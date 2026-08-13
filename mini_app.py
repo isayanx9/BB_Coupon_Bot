@@ -38,6 +38,7 @@ from database.crud import (
     get_order_by_id,
     get_recent_orders,
     get_referral_count,
+    get_active_flash_sales,
     get_ticket_by_id,
     get_open_tickets,
     get_bot_setting,
@@ -49,6 +50,7 @@ from database.crud import (
     save_payment_session,
     save_order_coupon_code,
     set_bot_setting,
+    subscribe_stock_alert,
     release_order_delivery_claim,
     refund_order_wallet_if_needed,
     track_user,
@@ -174,6 +176,17 @@ async def bootstrap(request: Request):
         "wallet_balance": get_wallet_balance(user_id),
         "referrals": get_referral_count(user_id),
         "orders": [serialize_order(order) for order in orders],
+        "flash_sales": [
+            {
+                "id": sale.id,
+                "coupon_name": sale.coupon_name,
+                "title": sale.title,
+                "discount_text": sale.discount_text,
+                "expires_at": sale.expires_at.replace(tzinfo=timezone.utc).isoformat()
+                if sale.expires_at else None,
+            }
+            for sale in get_active_flash_sales(limit=3)
+        ],
         "cashfree_mode": CASHFREE_ENV,
     }
 
@@ -192,6 +205,10 @@ async def admin_overview(request: Request):
             for ticket in get_open_tickets(limit=8)
         ],
         "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),
+        "backup": {
+            "provider": "Railway Postgres",
+            "status": get_bot_setting("railway_backup_status", "Verify backup schedule in Railway dashboard"),
+        },
     }
 
 
@@ -224,6 +241,55 @@ async def service_status(request: Request):
 async def user_tickets(request: Request):
     user = telegram_user(request)
     return {"tickets": [{"id": t.id, "subject": t.subject, "status": t.status, "messages": t.messages, "created_at": t.created_at.isoformat()} for t in get_user_tickets(int(user["id"]))]}
+
+
+@router.post("/api/mini/stock-watch")
+async def stock_watch(request: Request):
+    user = telegram_user(request)
+    body = await request.json()
+    coupon_name = str(body.get("coupon_name", "ALL")).strip()[:255] or "ALL"
+    if not subscribe_stock_alert(int(user["id"]), coupon_name):
+        raise HTTPException(500, "Could not save your stock alert.")
+    return {"ok": True, "coupon_name": coupon_name}
+
+
+@router.post("/api/mini/coupon-validate")
+async def coupon_validate(request: Request):
+    user = telegram_user(request)
+    code = str((await request.json()).get("code", "")).strip()
+    if len(code) < 3:
+        raise HTTPException(422, "Enter a valid coupon code.")
+    orders = get_user_orders(int(user["id"]))
+    matched = next((order for order in orders if order.delivery_status == "DELIVERED" and code in (order.coupon_code or "").split(", ")), None)
+    return {
+        "valid": bool(matched),
+        "order_id": matched.order_id if matched else None,
+        "coupon_name": matched.coupon_name if matched else None,
+    }
+
+
+@router.get("/api/mini/receipts/{order_id}")
+async def receipt(order_id: str, request: Request):
+    user = telegram_user(request)
+    order = get_order_by_id(order_id)
+    if not order or order.user_id != int(user["id"]):
+        raise HTTPException(404, "Order not found.")
+    return {"receipt": serialize_order(order), "shop": "BB Coupon Shop"}
+
+
+@router.get("/api/mini/preferences")
+async def preferences(request: Request):
+    user = telegram_user(request)
+    enabled = get_bot_setting(f"notifications:{user['id']}", "on").lower() == "on"
+    return {"stock_alerts": enabled}
+
+
+@router.post("/api/mini/preferences")
+async def save_preferences(request: Request):
+    user = telegram_user(request)
+    enabled = bool((await request.json()).get("stock_alerts", True))
+    set_bot_setting(f"notifications:{user['id']}", "on" if enabled else "off")
+    return {"stock_alerts": enabled}
 
 
 @router.get("/api/mini/admin/orders/search")
