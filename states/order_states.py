@@ -70,6 +70,10 @@ class FlashSaleState(StatesGroup):
     waiting_for_duration_minutes = State()
 
 
+class CancelFlashSaleState(StatesGroup):
+    waiting_for_sale_id = State()
+
+
 class BulkBuyerPriceState(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_coupon_name = State()

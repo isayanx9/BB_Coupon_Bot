@@ -37,6 +37,7 @@ from database.crud import (
     get_coupon_summary,
     get_order_by_id,
     get_recent_orders,
+    get_delivery_reconciliation,
     get_referral_count,
     get_active_flash_sales,
     get_ticket_by_id,
@@ -65,6 +66,8 @@ from texts import BOT_USERNAME
 ROOT = Path(__file__).parent / "mini_app"
 router = APIRouter()
 router.mount("/mini/static", StaticFiles(directory=ROOT), name="mini-static")
+MEMBERSHIP_CACHE_SECONDS = 300
+_membership_cache = {}
 
 
 async def telegram_user(request: Request):
@@ -93,6 +96,10 @@ async def telegram_user(request: Request):
     # payment issues even if an old ban record exists.
     if str(user_id) != str(ADMIN_ID) and is_user_banned(user_id):
         raise HTTPException(403, "This account is restricted.")
+    cached_until = _membership_cache.get(user_id)
+    if cached_until and cached_until > datetime.now(timezone.utc).timestamp():
+        track_user(user_id, user.get("username"))
+        return user
     bot = Bot(token=BOT_TOKEN)
     try:
         channel_member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
@@ -104,6 +111,7 @@ async def telegram_user(request: Request):
     valid_statuses = {"member", "administrator", "creator", "owner"}
     if channel_member.status not in valid_statuses or group_member.status not in valid_statuses:
         raise HTTPException(403, "Join our required channel and support group, then tap Verify in the bot.")
+    _membership_cache[user_id] = datetime.now(timezone.utc).timestamp() + MEMBERSHIP_CACHE_SECONDS
     track_user(user_id, user.get("username"))
     return user
 
@@ -220,6 +228,7 @@ async def admin_overview(request: Request):
             {"id": ticket.id, "subject": ticket.subject, "status": ticket.status}
             for ticket in get_open_tickets(limit=8)
         ],
+        "delivery_recovery_count": len(get_delivery_reconciliation(limit=100)),
         "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),
         "backup": {
             "provider": "Railway Postgres",

@@ -53,6 +53,7 @@ from handlers.admin import router as admin_router
 from mini_app import router as mini_app_router
 from services.coupon_service import deliver_coupon, deliver_coupons
 from services.stock_alerts import notify_stock_alerts, should_send_stock_alert
+from services.ai_assistant import get_ai_health
 
 app = FastAPI()
 app.include_router(mini_app_router)
@@ -191,6 +192,7 @@ async def health():
         "cashfree_ok": cashfree_ok,
         "cashfree_env": CASHFREE_ENV,
         "public_base_url": PUBLIC_BASE_URL,
+        "cutie_ai": get_ai_health(),
     }
 
 
@@ -589,7 +591,7 @@ async def cashfree_webhook(request: Request):
                         ),
                         reply_markup=feedback_keyboard(order.order_id),
                     )
-                    if should_send_stock_alert(remaining_stock):
+                    if should_send_stock_alert(remaining_stock, order.coupon_name):
                         await notify_stock_alerts(
                             bot,
                             order.coupon_name,

@@ -932,7 +932,7 @@ async def finalize_paid_order(order_id, bot: Bot):
         ),
         reply_markup=feedback_keyboard(order.order_id),
     )
-    if should_send_stock_alert(remaining_stock):
+    if should_send_stock_alert(remaining_stock, order.coupon_name):
         await notify_stock_alerts(
             bot,
             order.coupon_name,

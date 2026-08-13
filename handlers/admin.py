@@ -18,6 +18,7 @@ from database.crud import (
     ban_user,
     close_ticket,
     create_flash_sale,
+    cancel_flash_sale,
     delete_coupon_group,
     export_backup_rows,
     get_all_bot_settings,
@@ -41,6 +42,9 @@ from database.crud import (
     get_total_revenue,
     get_total_users,
     get_coupon_stock,
+    get_active_flash_sales,
+    get_active_flash_sale_for_coupon,
+    get_delivery_reconciliation,
     coupon_code_exists,
     get_wallet_balance,
     is_user_banned,
@@ -62,6 +66,7 @@ from states.order_states import (
     DeleteCouponState,
     ExtractCodeState,
     FlashSaleState,
+    CancelFlashSaleState,
     PriceState,
     SettingState,
     TicketReplyState,
@@ -83,6 +88,8 @@ from texts import (
     BTN_MAINTENANCE_ON,
     BTN_EXIT_DEVELOPER,
     BTN_FLASH_SALE,
+    BTN_CANCEL_FLASH_SALE,
+    BTN_RECONCILE_DELIVERY,
     BTN_INVENTORY,
     BTN_MAIN_MENU,
     BTN_ORDERS,
@@ -622,11 +629,7 @@ async def extract_coupon_code(message: Message, state: FSMContext):
 async def broadcast(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
-
-    await message.answer(
-        "📣 <b>Broadcast System</b>\n\n"
-        "<blockquote>Send the text Cutie should send to every known non-banned user.</blockquote>"
-    )
+    await message.answer("Send the broadcast text. Cutie will show a preview and require you to type CONFIRM before it sends.")
     await state.set_state(BroadcastState.waiting_for_message)
 
 
@@ -634,59 +637,37 @@ async def broadcast(message: Message, state: FSMContext):
 async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
         return
-
-    if not claim_broadcast_message(message.chat.id, message.message_id):
-        # This is a Telegram webhook retry of the same admin message.
+    data = await state.get_data()
+    if not data.get("broadcast_text"):
+        if not message.text:
+            await message.answer("Text broadcasts only for the confirmation flow. Send your message as text.")
+            return
+        await state.update_data(broadcast_text=message.text)
+        await message.answer(f"<b>Preview</b>\n\n<blockquote>{escape(message.text)[:900]}</blockquote>\n\nType <code>CONFIRM</code> to send, or <code>CANCEL</code> to discard.")
         return
-
-    await broadcast_launch_effect(message)
-    sent = 0
-    failed = 0
-    photo_id = message.photo[-1].file_id if message.photo else None
-    broadcast_text = message.caption if photo_id else message.text
-
-    if not photo_id and not broadcast_text:
-        await message.answer("Send text, a photo, or a photo with caption for broadcast.")
+    command = (message.text or "").strip().upper()
+    if command == "CANCEL":
         await state.clear()
+        await message.answer("Broadcast cancelled.")
         return
-
+    if command != "CONFIRM":
+        await message.answer("Type CONFIRM to send or CANCEL to discard.")
+        return
+    broadcast_text = data["broadcast_text"]
+    if not claim_broadcast_message(message.chat.id, message.message_id):
+        return
+    await broadcast_launch_effect(message)
+    sent = failed = 0
     for user_id in get_all_user_ids():
         if is_user_banned(user_id):
             continue
-
         try:
-            if photo_id:
-                caption = "📣 <b>Broadcast from BB Coupon Bot</b>"
-                if broadcast_text:
-                    caption += f"\n\n<blockquote>{escape(broadcast_text)}</blockquote>"
-                await bot.send_photo(
-                    chat_id=user_id,
-                    photo=photo_id,
-                    caption=caption,
-                )
-                sent += 1
-                continue
-
-            await bot.send_message(
-                chat_id=user_id,
-                text=(
-                    "📣 <b>Broadcast from BB Coupon Bot</b>\n\n"
-                    f"<blockquote>{escape(broadcast_text or '')}</blockquote>"
-                ),
-            )
+            await bot.send_message(user_id, "📣 <b>Broadcast from BB Coupon Bot</b>\n\n" f"<blockquote>{escape(broadcast_text)}</blockquote>")
             sent += 1
         except Exception:
             failed += 1
-
-    await message.answer(
-        "✨ <b>Broadcast complete</b>\n\n"
-        f"<blockquote>Sent: <b>{sent}</b>\nFailed: <b>{failed}</b></blockquote>"
-    )
-    audit_admin_action(
-        message.from_user.id,
-        "broadcast",
-        f"type={'photo' if photo_id else 'text'}, sent={sent}, failed={failed}",
-    )
+    await message.answer("✨ <b>Broadcast complete</b>\n\n" f"<blockquote>Sent: <b>{sent}</b>\nFailed: <b>{failed}</b></blockquote>")
+    audit_admin_action(message.from_user.id, "broadcast", f"type=text, sent={sent}, failed={failed}")
     await state.clear()
 
 
@@ -1197,6 +1178,13 @@ async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
         await message.answer("Send duration from 1 to 10080 minutes.")
         return
     data = await state.get_data()
+    existing_sale = get_active_flash_sale_for_coupon(data["coupon_name"])
+    if existing_sale:
+        await message.answer(
+            f"An active sale already exists for this coupon (sale #{existing_sale.id}). Cancel it first to protect the original price."
+        )
+        await state.clear()
+        return
     if get_coupon_stock(data["coupon_name"]) < 1:
         await message.answer("No available stock exists for that coupon name. Add stock first, then create the sale.")
         await state.clear()
@@ -1243,6 +1231,55 @@ async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
     )
     audit_admin_action(message.from_user.id, "flash_sale", f"{data}; minutes={minutes}; sent={sent}")
     await state.clear()
+
+
+@router.message(F.text == BTN_CANCEL_FLASH_SALE)
+async def cancel_flash_sale_start(message: Message, state: FSMContext):
+    if not await admin_only(message):
+        return
+    sales = get_active_flash_sales(limit=20)
+    if not sales:
+        await message.answer("No active flash sales.")
+        return
+    listing = "\n".join(f"#{sale.id} — {escape(sale.coupon_name)} — {escape(sale.title)}" for sale in sales)
+    await message.answer(f"<b>Active flash sales</b>\n\n<blockquote>{listing}</blockquote>\n\nSend the Sale ID to cancel and restore its normal price.")
+    await state.set_state(CancelFlashSaleState.waiting_for_sale_id)
+
+
+@router.message(CancelFlashSaleState.waiting_for_sale_id)
+async def cancel_flash_sale_confirm(message: Message, state: FSMContext):
+    if not is_admin(message):
+        return
+    try:
+        sale_id = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Send a numeric Sale ID.")
+        return
+    sale = cancel_flash_sale(sale_id)
+    if not sale:
+        await message.answer("That sale is not active or could not be cancelled.")
+        return
+    audit_admin_action(message.from_user.id, "cancel_flash_sale", str(sale_id))
+    await message.answer(f"Sale #{sale_id} cancelled. Normal price for <code>{escape(sale.coupon_name)}</code> has been restored.")
+    await state.clear()
+
+
+@router.message(F.text == BTN_RECONCILE_DELIVERY)
+async def delivery_recovery(message: Message):
+    if not await admin_only(message):
+        return
+    orders = get_delivery_reconciliation(limit=30)
+    if not orders:
+        await message.answer("✅ <b>Delivery recovery</b>\n\nNo Cashfree-successful orders are waiting for coupon delivery.")
+        return
+    lines = "\n".join(
+        f"<code>{order.order_id}</code> — user <code>{order.user_id}</code> — {escape(order.coupon_name)}"
+        for order in orders
+    )
+    await message.answer(
+        "⚠️ <b>Cashfree-successful orders awaiting delivery</b>\n\n"
+        f"<blockquote>{lines}</blockquote>\n\nUse <code>/retry_delivery ORDER_ID</code> for a single safe delivery retry."
+    )
 
 
 @router.message(F.text == BTN_BACKUP)

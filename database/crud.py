@@ -993,6 +993,51 @@ def add_coupon(
         db.close()
 
 
+def get_active_flash_sale_for_coupon(coupon_name):
+    db = SessionLocal()
+    try:
+        return db.query(FlashSale).filter(
+            FlashSale.coupon_name == coupon_name,
+            FlashSale.active == True,
+            FlashSale.expires_at.isnot(None),
+            FlashSale.expires_at > datetime.utcnow(),
+        ).first()
+    finally:
+        db.close()
+
+
+def cancel_flash_sale(sale_id):
+    """Deactivate one sale and restore its saved pre-sale price."""
+    db = SessionLocal()
+    try:
+        sale = db.query(FlashSale).filter(FlashSale.id == sale_id, FlashSale.active == True).first()
+        if not sale:
+            return None
+        original = get_bot_setting(f"flash_sale_original_price:{sale.id}")
+        if original is not None:
+            db.query(Coupon).filter(Coupon.coupon_name == sale.coupon_name).update(
+                {Coupon.selling_price: int(original)}, synchronize_session=False
+            )
+        sale.active = False
+        db.commit()
+        return sale
+    except Exception:
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+
+def get_delivery_reconciliation(limit=30):
+    db = SessionLocal()
+    try:
+        return db.query(Order).filter(
+            Order.payment_status == "SUCCESS", Order.delivery_status != "DELIVERED"
+        ).order_by(Order.created_at.asc()).limit(limit).all()
+    finally:
+        db.close()
+
+
 def coupon_code_exists(coupon_code):
     db = SessionLocal()
 

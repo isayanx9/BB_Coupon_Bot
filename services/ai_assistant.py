@@ -210,10 +210,25 @@ def get_ai_answer(question):
             timeout=20,
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        payload_data = response.json()
+        content = payload_data["choices"][0]["message"]["content"]
+        if not content or not content.strip():
+            raise ValueError("OpenAI returned an empty response")
         return (
             f"<b>{AI_NAME} AI</b> 💖\n"
             f"<blockquote>{escape(content.strip())}</blockquote>"
         )
-    except Exception:
+    except requests.RequestException as error:
+        status = getattr(error.response, "status_code", "network")
+        # Never log headers, the API key, or user messages. Railway logs need
+        # only this safe status to diagnose billing, permissions, or model access.
+        print(f"Cutie AI OpenAI request failed: status={status}, model={OPENAI_MODEL}")
         return local_ai_answer(cleaned_question)
+    except (KeyError, TypeError, ValueError) as error:
+        print(f"Cutie AI response format failed: {type(error).__name__}, model={OPENAI_MODEL}")
+        return local_ai_answer(cleaned_question)
+
+
+def get_ai_health():
+    """Safe configuration status for health checks; never reveals the API key."""
+    return {"configured": bool(OPENAI_API_KEY), "model": OPENAI_MODEL}

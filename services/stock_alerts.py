@@ -6,7 +6,15 @@ from database.crud import get_bot_setting, get_stock_alert_user_ids
 SMART_STOCK_LEVELS = {5, 3, 1, 0}
 
 
-def should_send_stock_alert(stock_count):
+def should_send_stock_alert(stock_count, coupon_name=None):
+    """Use a coupon-specific threshold when the admin configures one."""
+    if coupon_name:
+        try:
+            threshold = int(get_bot_setting(f"low_stock_threshold:{coupon_name}", "0"))
+            if threshold > 0:
+                return stock_count <= threshold
+        except ValueError:
+            pass
     return stock_count in SMART_STOCK_LEVELS
 
 
