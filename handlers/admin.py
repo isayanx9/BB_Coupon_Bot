@@ -375,6 +375,7 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
 
     if added:
         sent = 0
+        broadcast_sent = 0
         for coupon_name in sorted(added_coupon_names):
             stock_count = get_coupon_stock(coupon_name)
             notified = await notify_stock_alerts(
@@ -384,8 +385,25 @@ async def process_bulk_coupon(message: Message, state: FSMContext, bot: Bot):
                 reason="restock",
             )
             sent += notified
+            announcement = (
+                "📦 <b>New coupon stock is live</b>\n\n"
+                f"<blockquote>Coupon: <code>{escape(coupon_name)}</code>\n"
+                f"Available: <b>{stock_count}</b></blockquote>\n\n"
+                "Open BB Coupon Shop to view the deal."
+            )
+            for user_id in get_all_user_ids():
+                if is_user_banned(user_id):
+                    continue
+                try:
+                    await bot.send_message(user_id, announcement)
+                    broadcast_sent += 1
+                except Exception:
+                    pass
 
-        await message.answer(f"🔔 Restock alerts sent: <b>{sent}</b>")
+        await message.answer(
+            f"🔔 Stock-watch alerts sent: <b>{sent}</b>\n"
+            f"📣 New-stock broadcast sent: <b>{broadcast_sent}</b>"
+        )
 
     await state.clear()
 
@@ -1115,7 +1133,18 @@ async def flash_sale_start(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
 
-    await message.answer("⚡ <b>Send coupon name for flash sale.</b>")
+    available = [item for item in get_coupon_summary(limit=1000) if item["available"] > 0]
+    if not available:
+        await message.answer("No coupon stock is available. Add coupons before creating a flash sale.")
+        return
+    names = "\n".join(
+        f"• <code>{escape(item['name'])}</code> — {item['available']} available — Rs {item['price']}"
+        for item in available[:30]
+    )
+    await message.answer(
+        "⚡ <b>Select an available coupon for the flash sale.</b>\n\n"
+        f"<blockquote>{names}</blockquote>\n\nSend the exact coupon name."
+    )
     await state.set_state(FlashSaleState.waiting_for_coupon_name)
 
 
@@ -1172,7 +1201,8 @@ async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
         await message.answer("No available stock exists for that coupon name. Add stock first, then create the sale.")
         await state.clear()
         return
-    if not update_coupon_price(data["coupon_name"], data["sale_price"]):
+    summary = next((item for item in get_coupon_summary(limit=1000) if item["name"] == data["coupon_name"]), None)
+    if not summary or not update_coupon_price(data["coupon_name"], data["sale_price"]):
         await message.answer("Coupon name was not found. No sale was created.")
         await state.clear()
         return
@@ -1183,6 +1213,12 @@ async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
         f"Rs {data['sale_price']} · ends in {minutes} minutes",
         expires_at=expires_at,
     )
+    if not sale_id:
+        update_coupon_price(data["coupon_name"], summary["price"])
+        await message.answer("The sale could not be saved. The original price has been restored.")
+        await state.clear()
+        return
+    set_bot_setting(f"flash_sale_original_price:{sale_id}", str(summary["price"]))
     broadcast_text = (
         f"⚡ <b>{escape(data['title'])}</b>\n\n"
         f"<blockquote>Coupon: <code>{escape(data['coupon_name'])}</code>\n"
@@ -1202,6 +1238,7 @@ async def flash_sale_duration(message: Message, state: FSMContext, bot: Bot):
     await message.answer(
         "Flash sale created.\n\n"
         f"<blockquote>Sale ID: <code>{sale_id}</code>\nPrice: <b>Rs {data['sale_price']}</b>\n"
+        f"Original price: <b>Rs {summary['price']}</b>\n"
         f"Ends: <b>{expires_at.strftime('%d %b %Y, %I:%M %p UTC')}</b>\nBroadcast sent: <b>{sent}</b></blockquote>"
     )
     audit_admin_action(message.from_user.id, "flash_sale", f"{data}; minutes={minutes}; sent={sent}")

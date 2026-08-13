@@ -838,11 +838,21 @@ def get_active_flash_sales(limit=5):
 
     try:
         now = datetime.utcnow()
-        (
+        expired_sales = (
             db.query(FlashSale)
             .filter(FlashSale.active == True, FlashSale.expires_at.isnot(None), FlashSale.expires_at <= now)
-            .update({FlashSale.active: False}, synchronize_session=False)
+            .all()
         )
+        for sale in expired_sales:
+            original_price = get_bot_setting(f"flash_sale_original_price:{sale.id}")
+            if original_price is not None:
+                try:
+                    db.query(Coupon).filter(Coupon.coupon_name == sale.coupon_name).update(
+                        {Coupon.selling_price: int(original_price)}, synchronize_session=False
+                    )
+                except ValueError:
+                    pass
+            sale.active = False
         db.commit()
         return (
             db.query(FlashSale)
