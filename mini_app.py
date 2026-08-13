@@ -243,6 +243,12 @@ async def admin_overview(request: Request):
             "provider": "Railway Postgres",
             "status": get_bot_setting("railway_backup_status", "Verify backup schedule in Railway dashboard"),
         },
+        "integrations": {
+            "telegram": get_bot_setting("webhook:telegram_last_seen", "waiting for webhook"),
+            "cashfree": get_bot_setting("webhook:cashfree_last_seen", "waiting for payment webhook"),
+            "payment_worker": get_bot_setting("worker:payment_expiry", "starting"),
+            "flash_worker": get_bot_setting("worker:flash_sale_expiry", "starting"),
+        },
     }
 
 
@@ -264,7 +270,7 @@ async def admin_maintenance(request: Request):
 async def service_status(request: Request):
     await telegram_user(request)
     return {
-        "shop": "online",
+        "shop": "maintenance" if get_bot_setting("maintenance_mode", "off").lower() == "on" else "online",
         "cashfree": "online",
         "instant_delivery": "active",
         "maintenance_mode": get_bot_setting("maintenance_mode", "off").lower(),

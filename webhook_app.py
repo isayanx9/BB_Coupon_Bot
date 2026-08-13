@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from database.crud import (
     get_open_tickets,
     get_order_by_id,
     get_bot_setting,
+    set_bot_setting,
     get_active_flash_sales,
     audit_admin_action,
     expire_order_if_needed,
@@ -68,13 +70,18 @@ telegram_bot = Bot(
 telegram_router_included = False
 payment_expiry_task = None
 flash_sale_expiry_task = None
+service_started_at = time.time()
 
 
 async def payment_expiry_worker():
     """Keep pending orders from remaining payable after their Cashfree window."""
     while True:
-        for order_id in expire_due_orders():
-            refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        try:
+            for order_id in expire_due_orders():
+                refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+            set_bot_setting("worker:payment_expiry", datetime.now(timezone.utc).isoformat())
+        except Exception as error:
+            print(f"Payment expiry worker error: {error}")
         await asyncio.sleep(30)
 
 
@@ -85,6 +92,7 @@ async def flash_sale_expiry_worker():
             # This database operation expires due sales and restores their
             # saved normal price atomically before returning active sales.
             get_active_flash_sales(limit=1)
+            set_bot_setting("worker:flash_sale_expiry", datetime.now(timezone.utc).isoformat())
         except Exception as error:
             print(f"Flash sale expiry worker error: {error}")
         await asyncio.sleep(30)
@@ -153,6 +161,7 @@ async def shutdown():
 @app.post("/webhook/telegram")
 async def telegram_webhook(request: Request):
     data = await request.json()
+    set_bot_setting("webhook:telegram_last_seen", datetime.now(timezone.utc).isoformat())
     update = Update.model_validate(data, context={"bot": telegram_bot})
     await dp.feed_update(telegram_bot, update)
     return JSONResponse({"ok": True})
@@ -193,6 +202,15 @@ async def health():
         "cashfree_env": CASHFREE_ENV,
         "public_base_url": PUBLIC_BASE_URL,
         "cutie_ai": get_ai_health(),
+        "uptime_seconds": int(time.time() - service_started_at),
+        "workers": {
+            "payment_expiry": get_bot_setting("worker:payment_expiry", "starting"),
+            "flash_sale_expiry": get_bot_setting("worker:flash_sale_expiry", "starting"),
+        },
+        "webhooks": {
+            "telegram_last_seen": get_bot_setting("webhook:telegram_last_seen", "waiting"),
+            "cashfree_last_seen": get_bot_setting("webhook:cashfree_last_seen", "waiting"),
+        },
     }
 
 
@@ -488,8 +506,9 @@ async def cashfree_webhook(request: Request):
     except Exception:
         data = {}
 
-    print("Cashfree webhook:")
-    print(data)
+    # Do not print full Cashfree payloads: they may contain customer/payment
+    # metadata. The safe audit record below keeps only order ID and status.
+    set_bot_setting("webhook:cashfree_last_seen", datetime.now(timezone.utc).isoformat())
 
     try:
         order_id = (
