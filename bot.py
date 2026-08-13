@@ -454,7 +454,10 @@ async def reject_if_banned(message: Message):
         )
         return True
 
-    if get_bot_setting("maintenance_mode", "off").lower() == "on":
+    if (
+        str(message.from_user.id) != str(ADMIN_ID)
+        and get_bot_setting("maintenance_mode", "off").lower() == "on"
+    ):
         await message.answer(
             "🛠 <b>Maintenance mode</b>\n\n"
             f"<blockquote>{escape(get_bot_setting('maintenance_text', 'Cutie is upgrading the bot. Please try again soon.'))}</blockquote>"
