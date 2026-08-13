@@ -89,7 +89,9 @@ def telegram_user(request: Request):
         raise HTTPException(401, "Telegram user is missing.") from error
 
     user_id = int(user["id"])
-    if is_user_banned(user_id):
+    # The configured owner must retain access to repair maintenance, stock, or
+    # payment issues even if an old ban record exists.
+    if str(user_id) != str(ADMIN_ID) and is_user_banned(user_id):
         raise HTTPException(403, "This account is restricted.")
     track_user(user_id, user.get("username"))
     return user

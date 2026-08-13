@@ -84,10 +84,37 @@ from texts import (
 dp = Dispatcher()
 
 
+def is_configured_admin(user_id) -> bool:
+    """The configured owner must always retain recovery access."""
+    return bool(ADMIN_ID) and str(user_id) == str(ADMIN_ID)
+
+
+@dp.message.outer_middleware()
+async def restrict_user_messages(handler, event, data):
+    """Apply maintenance consistently before every message handler.
+
+    Admin traffic is deliberately excluded so the owner can turn maintenance
+    off, inspect orders, and repair inventory even while users are paused.
+    """
+    user = event.from_user
+    if not user or is_configured_admin(user.id):
+        return await handler(event, data)
+    if is_user_banned(user.id):
+        await event.answer("🚫 <b>Access blocked.</b>")
+        return
+    if get_bot_setting("maintenance_mode", "off").lower() == "on":
+        await event.answer(
+            "🛠 <b>Maintenance mode</b>\n\n"
+            f"<blockquote>{escape(get_bot_setting('maintenance_text', 'Cutie is upgrading the bot. Please try again soon.'))}</blockquote>"
+        )
+        return
+    return await handler(event, data)
+
+
 @dp.callback_query.outer_middleware()
 async def restrict_user_callbacks(handler, event, data):
     """Apply ban and maintenance checks to every existing inline button."""
-    if str(event.from_user.id) != str(ADMIN_ID):
+    if not is_configured_admin(event.from_user.id):
         if is_user_banned(event.from_user.id):
             await event.answer("Access blocked.", show_alert=True)
             return
@@ -445,6 +472,8 @@ async def referral_link_effect(message: Message):
 
 
 async def reject_if_banned(message: Message):
+    if is_configured_admin(message.from_user.id):
+        return False
     track_user(message.from_user.id, message.from_user.username)
 
     if is_user_banned(message.from_user.id):
