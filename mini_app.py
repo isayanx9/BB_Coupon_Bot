@@ -50,6 +50,7 @@ from database.crud import (
 )
 from database.payment import create_cashfree_payment_link, get_cashfree_order_status
 from services.coupon_service import deliver_coupons
+from texts import BOT_USERNAME
 
 ROOT = Path(__file__).parent / "mini_app"
 router = APIRouter()
@@ -158,7 +159,8 @@ async def bootstrap(request: Request):
             refund_order_wallet_if_needed(order.order_id, "Payment expiry refund")
     orders = get_user_orders(user_id)[:20]
     return {
-        "user": {"first_name": user.get("first_name", "Friend"), "username": user.get("username")},
+        "user": {"id": user_id, "first_name": user.get("first_name", "Friend"), "username": user.get("username")},
+        "bot_username": BOT_USERNAME,
         "is_admin": str(user_id) == str(ADMIN_ID),
         "coupons": coupons,
         "wallet_balance": get_wallet_balance(user_id),
