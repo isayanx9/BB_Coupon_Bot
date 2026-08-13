@@ -31,6 +31,7 @@ from database.crud import (
     get_open_tickets,
     get_order_by_id,
     get_bot_setting,
+    get_active_flash_sales,
     audit_admin_action,
     expire_order_if_needed,
     get_payment_session,
@@ -65,6 +66,7 @@ telegram_bot = Bot(
 )
 telegram_router_included = False
 payment_expiry_task = None
+flash_sale_expiry_task = None
 
 
 async def payment_expiry_worker():
@@ -72,6 +74,18 @@ async def payment_expiry_worker():
     while True:
         for order_id in expire_due_orders():
             refund_order_wallet_if_needed(order_id, "Payment expiry refund")
+        await asyncio.sleep(30)
+
+
+async def flash_sale_expiry_worker():
+    """Restore timed sale prices even if no customer opens the Mini App."""
+    while True:
+        try:
+            # This database operation expires due sales and restores their
+            # saved normal price atomically before returning active sales.
+            get_active_flash_sales(limit=1)
+        except Exception as error:
+            print(f"Flash sale expiry worker error: {error}")
         await asyncio.sleep(30)
 
 
@@ -101,7 +115,7 @@ def web_admin_allowed(token):
 
 @app.on_event("startup")
 async def startup():
-    global telegram_router_included, payment_expiry_task
+    global telegram_router_included, payment_expiry_task, flash_sale_expiry_task
 
     require_env()
     initialize_database(Base)
@@ -122,12 +136,16 @@ async def startup():
     )
     if payment_expiry_task is None or payment_expiry_task.done():
         payment_expiry_task = asyncio.create_task(payment_expiry_worker())
+    if flash_sale_expiry_task is None or flash_sale_expiry_task.done():
+        flash_sale_expiry_task = asyncio.create_task(flash_sale_expiry_worker())
 
 
 @app.on_event("shutdown")
 async def shutdown():
     if payment_expiry_task:
         payment_expiry_task.cancel()
+    if flash_sale_expiry_task:
+        flash_sale_expiry_task.cancel()
     await telegram_bot.session.close()
 
 
