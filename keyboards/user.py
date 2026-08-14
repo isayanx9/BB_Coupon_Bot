@@ -53,11 +53,11 @@ def launch_shop_keyboard():
 def user_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
-            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
-            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
-            [KeyboardButton(text=BTN_STOCK_ALERTS)],
+            [KeyboardButton(text=BTN_DEAL_VAULT, style="success"), KeyboardButton(text=BTN_ACCESS_LOG, style="primary")],
+            [KeyboardButton(text=BTN_WALLET, style="success"), KeyboardButton(text=BTN_REFERRAL, style="primary")],
+            [KeyboardButton(text=BTN_AI_ASSIST, style="primary"), KeyboardButton(text=BTN_PROFILE, style="primary")],
+            [KeyboardButton(text=BTN_SUPPORT, style="primary"), KeyboardButton(text=BTN_RAISE_TICKET, style="danger")],
+            [KeyboardButton(text=BTN_STOCK_ALERTS, style="primary")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -68,12 +68,12 @@ def user_main_menu():
 def admin_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
-            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
-            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
-            [KeyboardButton(text=BTN_STOCK_ALERTS)],
-            [KeyboardButton(text=BTN_CONTROL_CENTER)],
+            [KeyboardButton(text=BTN_DEAL_VAULT, style="success"), KeyboardButton(text=BTN_ACCESS_LOG, style="primary")],
+            [KeyboardButton(text=BTN_WALLET, style="success"), KeyboardButton(text=BTN_REFERRAL, style="primary")],
+            [KeyboardButton(text=BTN_AI_ASSIST, style="primary"), KeyboardButton(text=BTN_PROFILE, style="primary")],
+            [KeyboardButton(text=BTN_SUPPORT, style="primary"), KeyboardButton(text=BTN_RAISE_TICKET, style="danger")],
+            [KeyboardButton(text=BTN_STOCK_ALERTS, style="primary")],
+            [KeyboardButton(text=BTN_CONTROL_CENTER, style="danger")],
         ],
         resize_keyboard=True,
         is_persistent=True,
