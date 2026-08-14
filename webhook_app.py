@@ -424,7 +424,17 @@ async def pay_page(order_id: str):
                 paymentSessionId: "{session_id}",
                 redirectTarget: "_top"
             }};
-            const openCheckout = () => cashfree.checkout(checkoutOptions);
+            let checkoutOpened = false;
+            const openCheckout = async () => {{
+                if (checkoutOpened) return;
+                checkoutOpened = true;
+                try {{
+                    await cashfree.checkout(checkoutOptions);
+                }} catch (error) {{
+                    checkoutOpened = false;
+                    document.querySelector(".status").textContent = "Secure checkout could not open automatically. Tap Open secure checkout.";
+                }}
+            }};
             document.getElementById("retryCheckout").addEventListener("click", openCheckout);
             const expiresAt = new Date("{expires_at}").getTime();
             const timer = document.getElementById("paymentTimer");
@@ -437,7 +447,9 @@ async def pay_page(order_id: str):
             }};
             updateTimer();
             window.setInterval(updateTimer, 1000);
-            window.setTimeout(openCheckout, 150);
+            // Run immediately: this page was opened by the customer's payment
+            // action, so Cashfree can show its full hosted payment methods.
+            openCheckout();
         </script>
     </body>
     </html>

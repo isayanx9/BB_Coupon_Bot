@@ -41,12 +41,11 @@ startPayment = async function () {
     tick();
 
     if (!result.checkout_url) throw Error('Secure checkout is unavailable.');
-    // Telegram's supported external-link API opens the hosted Cashfree page
-    // in the system browser instead of navigating the Mini App to a UPI URI.
-    setTimeout(() => {
-      if (tg?.openLink) tg.openLink(result.checkout_url);
-      else window.location.assign(result.checkout_url);
-    }, 150);
+    // Open immediately while Telegram still associates this action with the
+    // customer's payment tap. A delayed call can be blocked by some clients.
+    // This opens Cashfree's hosted checkout in the external system browser.
+    if (tg?.openLink) tg.openLink(result.checkout_url, { try_instant_view: false });
+    else window.location.assign(result.checkout_url);
   } catch (error) {
     toast(error.message);
   }
