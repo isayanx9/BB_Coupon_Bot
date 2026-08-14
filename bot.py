@@ -150,13 +150,13 @@ def feedback_keyboard(order_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="1", callback_data=f"feedback_{order_id}_1"),
-                InlineKeyboardButton(text="2", callback_data=f"feedback_{order_id}_2"),
-                InlineKeyboardButton(text="3", callback_data=f"feedback_{order_id}_3"),
-                InlineKeyboardButton(text="4", callback_data=f"feedback_{order_id}_4"),
-                InlineKeyboardButton(text="5", callback_data=f"feedback_{order_id}_5"),
+                InlineKeyboardButton(text="1", callback_data=f"feedback_{order_id}_1", style="danger"),
+                InlineKeyboardButton(text="2", callback_data=f"feedback_{order_id}_2", style="danger"),
+                InlineKeyboardButton(text="3", callback_data=f"feedback_{order_id}_3", style="primary"),
+                InlineKeyboardButton(text="4", callback_data=f"feedback_{order_id}_4", style="success"),
+                InlineKeyboardButton(text="5", callback_data=f"feedback_{order_id}_5", style="success"),
             ],
-            [InlineKeyboardButton(text="Skip", callback_data=f"feedback_{order_id}_0")],
+            [InlineKeyboardButton(text="Skip", callback_data=f"feedback_{order_id}_0", style="primary")],
         ]
     )
 
@@ -854,8 +854,8 @@ async def pay_order(callback: CallbackQuery):
     )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Pay Securely", url=payment_url)],
-            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}")],
+            [InlineKeyboardButton(text="💳 Pay Securely", url=payment_url, style="success")],
+            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}", style="primary")],
         ]
     )
 
@@ -1181,8 +1181,8 @@ async def wallet(message: Message):
     balance = get_wallet_balance(message.from_user.id)
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Top Up Wallet", callback_data="wallet_topup")],
-            [InlineKeyboardButton(text="📜 Wallet History", callback_data="wallet_history")],
+            [InlineKeyboardButton(text="💳 Top Up Wallet", callback_data="wallet_topup", style="success")],
+            [InlineKeyboardButton(text="📜 Wallet History", callback_data="wallet_history", style="primary")],
         ]
     )
     await message.answer(
@@ -1302,8 +1302,8 @@ async def wallet_topup_amount(message: Message, state: FSMContext, bot: Bot):
     )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Pay Wallet Top Up", url=payment_url)],
-            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}")],
+            [InlineKeyboardButton(text="💳 Pay Wallet Top Up", url=payment_url, style="success")],
+            [InlineKeyboardButton(text="🔁 I Paid, Recheck", callback_data=f"recheck_{order_id}", style="primary")],
         ]
     )
 
