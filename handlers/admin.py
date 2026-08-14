@@ -1380,8 +1380,8 @@ async def reset_all_confirm(message: Message, state: FSMContext):
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="⚠️ Yes, Reset Everything", callback_data="confirm_reset_all", style="danger"),
-                InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_reset_all", style="primary"),
+                InlineKeyboardButton(text="⚠️ Yes, Reset Everything", callback_data="confirm_reset_all"),
+                InlineKeyboardButton(text="❌ Cancel", callback_data="cancel_reset_all"),
             ]
         ]
     )

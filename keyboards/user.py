@@ -25,15 +25,15 @@ def join_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text=BTN_JOIN_CHANNEL, url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")
     kb.button(text=BTN_JOIN_GROUP, url=f"https://t.me/{GROUP_USERNAME.lstrip('@')}")
-    kb.button(text=BTN_VERIFY, callback_data="verify_user", style="primary")
+    kb.button(text=BTN_VERIFY, callback_data="verify_user")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def terms_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text=BTN_ACCEPT, callback_data="accept_terms", style="success")
-    kb.button(text=BTN_DECLINE, callback_data="decline_terms", style="danger")
+    kb.button(text=BTN_ACCEPT, callback_data="accept_terms")
+    kb.button(text=BTN_DECLINE, callback_data="decline_terms")
     kb.adjust(2)
     return kb.as_markup()
 
@@ -44,7 +44,6 @@ def launch_shop_keyboard():
         InlineKeyboardButton(
             text="🛍️ Open BB Coupon Shop",
             web_app=WebAppInfo(url=f"{PUBLIC_BASE_URL}/mini"),
-            style="primary",
         )
     )
     return kb.as_markup()
@@ -53,11 +52,11 @@ def launch_shop_keyboard():
 def user_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_DEAL_VAULT, style="success"), KeyboardButton(text=BTN_ACCESS_LOG, style="primary")],
-            [KeyboardButton(text=BTN_WALLET, style="success"), KeyboardButton(text=BTN_REFERRAL, style="primary")],
-            [KeyboardButton(text=BTN_AI_ASSIST, style="primary"), KeyboardButton(text=BTN_PROFILE, style="primary")],
-            [KeyboardButton(text=BTN_SUPPORT, style="primary"), KeyboardButton(text=BTN_RAISE_TICKET, style="danger")],
-            [KeyboardButton(text=BTN_STOCK_ALERTS, style="primary")],
+            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
+            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
+            [KeyboardButton(text=BTN_STOCK_ALERTS)],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -68,12 +67,12 @@ def user_main_menu():
 def admin_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_DEAL_VAULT, style="success"), KeyboardButton(text=BTN_ACCESS_LOG, style="primary")],
-            [KeyboardButton(text=BTN_WALLET, style="success"), KeyboardButton(text=BTN_REFERRAL, style="primary")],
-            [KeyboardButton(text=BTN_AI_ASSIST, style="primary"), KeyboardButton(text=BTN_PROFILE, style="primary")],
-            [KeyboardButton(text=BTN_SUPPORT, style="primary"), KeyboardButton(text=BTN_RAISE_TICKET, style="danger")],
-            [KeyboardButton(text=BTN_STOCK_ALERTS, style="primary")],
-            [KeyboardButton(text=BTN_CONTROL_CENTER, style="danger")],
+            [KeyboardButton(text=BTN_DEAL_VAULT), KeyboardButton(text=BTN_ACCESS_LOG)],
+            [KeyboardButton(text=BTN_WALLET), KeyboardButton(text=BTN_REFERRAL)],
+            [KeyboardButton(text=BTN_AI_ASSIST), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_SUPPORT), KeyboardButton(text=BTN_RAISE_TICKET)],
+            [KeyboardButton(text=BTN_STOCK_ALERTS)],
+            [KeyboardButton(text=BTN_CONTROL_CENTER)],
         ],
         resize_keyboard=True,
         is_persistent=True,

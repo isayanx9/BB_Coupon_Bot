@@ -163,9 +163,19 @@ async def shutdown():
 async def telegram_webhook(request: Request):
     data = await request.json()
     set_bot_setting("webhook:telegram_last_seen", datetime.now(timezone.utc).isoformat())
-    update = Update.model_validate(data, context={"bot": telegram_bot})
-    await dp.feed_update(telegram_bot, update)
-    return JSONResponse({"ok": True})
+    try:
+        update = Update.model_validate(data, context={"bot": telegram_bot})
+        await dp.feed_update(telegram_bot, update)
+        set_bot_setting("webhook:telegram_last_error", "")
+        return JSONResponse({"ok": True})
+    except Exception as error:
+        # Acknowledge a malformed/obsolete update after recording it. Returning
+        # 500 here makes Telegram retry the same message and blocks every later
+        # user action in the pending queue.
+        detail = f"{type(error).__name__}: {str(error)[:300]}"
+        set_bot_setting("webhook:telegram_last_error", detail)
+        print(f"Telegram update handling error: {detail}")
+        return JSONResponse({"ok": True, "handled": False})
 
 
 @app.get("/")
@@ -210,6 +220,7 @@ async def health():
         },
         "webhooks": {
             "telegram_last_seen": get_bot_setting("webhook:telegram_last_seen", "waiting"),
+            "telegram_last_error": get_bot_setting("webhook:telegram_last_error", "none"),
             "cashfree_last_seen": get_bot_setting("webhook:cashfree_last_seen", "waiting"),
         },
     }
