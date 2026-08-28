@@ -3,7 +3,7 @@ from html import escape
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ChatType, ParseMode
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -91,11 +91,15 @@ def is_configured_admin(user_id) -> bool:
 
 @dp.message.outer_middleware()
 async def restrict_user_messages(handler, event, data):
-    """Apply maintenance consistently before every message handler.
+    """Keep the bot private-chat only, then apply availability checks.
 
     Admin traffic is deliberately excluded so the owner can turn maintenance
     off, inspect orders, and repair inventory even while users are paused.
     """
+    if event.chat.type != ChatType.PRIVATE:
+        # The shop, admin tools, and customer data must never be exposed in
+        # groups.  Ignore all group messages without sending any response.
+        return
     user = event.from_user
     if not user or is_configured_admin(user.id):
         return await handler(event, data)
@@ -113,7 +117,11 @@ async def restrict_user_messages(handler, event, data):
 
 @dp.callback_query.outer_middleware()
 async def restrict_user_callbacks(handler, event, data):
-    """Apply ban and maintenance checks to every existing inline button."""
+    """Ignore group callbacks, then check private-chat button access."""
+    if not event.message or event.message.chat.type != ChatType.PRIVATE:
+        # Answering removes Telegram's loading spinner but sends no message.
+        await event.answer()
+        return
     if not is_configured_admin(event.from_user.id):
         if is_user_banned(event.from_user.id):
             await event.answer("Access blocked.", show_alert=True)
