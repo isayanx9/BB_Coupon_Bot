@@ -647,7 +647,14 @@ async def extract_coupon_code(message: Message, state: FSMContext):
 async def broadcast(message: Message, state: FSMContext):
     if not await admin_only(message):
         return
-    await message.answer("Send the broadcast text. Cutie will show a preview and require you to type CONFIRM before it sends.")
+    await state.clear()
+    await message.answer(
+        "<b>Broadcast creator</b>\n\n"
+        "Send either:\n"
+        "• a text message, or\n"
+        "• a photo with an optional caption.\n\n"
+        "Cutie will show a preview and require <code>CONFIRM</code> before sending."
+    )
     await state.set_state(BroadcastState.waiting_for_message)
 
 
@@ -656,12 +663,34 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message):
         return
     data = await state.get_data()
-    if not data.get("broadcast_text"):
-        if not message.text:
-            await message.answer("Text broadcasts only for the confirmation flow. Send your message as text.")
+    if not data.get("broadcast_type"):
+        if message.photo:
+            photo_id = message.photo[-1].file_id
+            # Keep captions well within Telegram's photo-caption limit after
+            # HTML escaping is applied during delivery.
+            caption = (message.caption or "").strip()[:900]
+            await state.update_data(
+                broadcast_type="photo",
+                broadcast_photo_id=photo_id,
+                broadcast_caption=caption,
+            )
+            await message.answer_photo(
+                photo=photo_id,
+                caption=(
+                    "<b>Photo broadcast preview</b>\n\n"
+                    f"<blockquote>{escape(caption)[:900] if caption else 'No caption'}</blockquote>\n\n"
+                    "Type <code>CONFIRM</code> to send, or <code>CANCEL</code> to discard."
+                ),
+            )
             return
-        await state.update_data(broadcast_text=message.text)
-        await message.answer(f"<b>Preview</b>\n\n<blockquote>{escape(message.text)[:900]}</blockquote>\n\nType <code>CONFIRM</code> to send, or <code>CANCEL</code> to discard.")
+        if not message.text:
+            await message.answer("Send text, or send a photo with an optional caption.")
+            return
+        await state.update_data(broadcast_type="text", broadcast_text=message.text)
+        await message.answer(
+            f"<b>Text broadcast preview</b>\n\n<blockquote>{escape(message.text)[:900]}</blockquote>\n\n"
+            "Type <code>CONFIRM</code> to send, or <code>CANCEL</code> to discard."
+        )
         return
     command = (message.text or "").strip().upper()
     if command == "CANCEL":
@@ -671,7 +700,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if command != "CONFIRM":
         await message.answer("Type CONFIRM to send or CANCEL to discard.")
         return
-    broadcast_text = data["broadcast_text"]
+    broadcast_type = data["broadcast_type"]
     if not claim_broadcast_message(message.chat.id, message.message_id):
         return
     await broadcast_launch_effect(message)
@@ -680,12 +709,25 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
         if is_user_banned(user_id):
             continue
         try:
-            await bot.send_message(user_id, "📣 <b>Broadcast from BB Coupon Bot</b>\n\n" f"<blockquote>{escape(broadcast_text)}</blockquote>")
+            if broadcast_type == "photo":
+                caption = (data.get("broadcast_caption") or "").strip()
+                await bot.send_photo(
+                    user_id,
+                    photo=data["broadcast_photo_id"],
+                    caption=escape(caption) if caption else None,
+                )
+            else:
+                broadcast_text = data["broadcast_text"]
+                await bot.send_message(
+                    user_id,
+                    "📣 <b>Broadcast from BB Coupon Bot</b>\n\n"
+                    f"<blockquote>{escape(broadcast_text)}</blockquote>",
+                )
             sent += 1
         except Exception:
             failed += 1
     await message.answer("✨ <b>Broadcast complete</b>\n\n" f"<blockquote>Sent: <b>{sent}</b>\nFailed: <b>{failed}</b></blockquote>")
-    audit_admin_action(message.from_user.id, "broadcast", f"type=text, sent={sent}, failed={failed}")
+    audit_admin_action(message.from_user.id, "broadcast", f"type={broadcast_type}, sent={sent}, failed={failed}")
     await state.clear()
 
 
